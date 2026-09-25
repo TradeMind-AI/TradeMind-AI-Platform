@@ -217,5 +217,7 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
-# Raw market data
+# Generated market datasets
 data/raw/*.csv
+data/processed/*.csv
+
