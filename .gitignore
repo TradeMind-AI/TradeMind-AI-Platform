@@ -220,4 +220,6 @@ __marimo__/
 # Generated market datasets
 data/raw/*.csv
 data/processed/*.csv
+data/processed/ml_splits/
+
 
