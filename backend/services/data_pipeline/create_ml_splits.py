@@ -10,7 +10,7 @@ INPUT_FILE = (
     PROJECT_ROOT
     / "data"
     / "processed"
-    / "btcusdt_1h_features.csv"
+    / "btcusdt_1h_features_enriched.csv"
 )
 
 OUTPUT_DIR = (
