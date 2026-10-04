@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import joblib
 import pandas as pd
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -121,6 +122,238 @@ def get_dashboard(
             ),
         )
 
+    ready = get_ready_state(config.key)
+
+    if config.key == "10m":
+        latest = trades.iloc[-1]
+
+        closed = trades[
+            trades["status"].astype(str)
+            == "CLOSED"
+        ].copy()
+
+        mid_returns = pd.to_numeric(
+            closed.get(
+                "mid_cost_net_pct",
+                pd.Series(dtype=float),
+            ),
+            errors="coerce",
+        ).dropna()
+
+        win_rate = (
+            float((mid_returns > 0).mean() * 100)
+            if not mid_returns.empty
+            else 0.0
+        )
+
+        net_return = (
+            float(mid_returns.sum())
+            if not mid_returns.empty
+            else 0.0
+        )
+
+        price = 0.0
+
+        if config.market_file.exists():
+            market = pd.read_csv(
+                config.market_file
+            )
+
+            if (
+                not market.empty
+                and "close" in market.columns
+            ):
+                price = safe_float(
+                    market.iloc[-1].get(
+                        "close",
+                        0.0,
+                    )
+                )
+
+        probabilities = {
+            "down": safe_float(
+                latest.get(
+                    "probability_down",
+                    0.0,
+                )
+            ),
+            "neutral": safe_float(
+                latest.get(
+                    "probability_neutral",
+                    0.0,
+                )
+            ),
+            "up": safe_float(
+                latest.get(
+                    "probability_up",
+                    0.0,
+                )
+            ),
+        }
+
+        recent_signals = []
+
+        for _, row in (
+            trades
+            .tail(10)
+            .iloc[::-1]
+            .iterrows()
+        ):
+            recent_signals.append(
+                {
+                    "timestamp": safe_string(
+                        row.get(
+                            "signal_time"
+                        )
+                    ),
+                    "prediction": safe_string(
+                        row.get(
+                            "prediction"
+                        )
+                    ),
+                    "confidence": safe_float(
+                        row.get(
+                            "confidence"
+                        )
+                    ),
+                    "signal": safe_string(
+                        row.get(
+                            "signal"
+                        )
+                    ),
+                    "status": safe_string(
+                        row.get(
+                            "status"
+                        )
+                    ),
+                }
+            )
+
+        bundle = {}
+
+        if config.model_file.exists():
+            bundle = joblib.load(
+                config.model_file
+            )
+
+        return {
+            "symbol": "BTC / USDT",
+            "timeframe": display_timeframe(
+                config.key
+            ),
+            "timeframeKey": config.key,
+            "price": price,
+            "prediction": safe_string(
+                latest.get(
+                    "prediction",
+                    "NEUTRAL",
+                )
+            ),
+            "confidence": safe_float(
+                latest.get(
+                    "confidence",
+                    0.0,
+                )
+            ),
+            "signal": safe_string(
+                latest.get(
+                    "signal",
+                    "HOLD",
+                )
+            ),
+            "probabilities": probabilities,
+            "balance": 10000.0,
+            "winRate": win_rate,
+            "netReturn": net_return,
+            "modelName": safe_string(
+                latest.get(
+                    "model_name",
+                    bundle.get(
+                        "model_name",
+                        config.model_file.stem,
+                    ),
+                )
+            ),
+            "featureCount": len(
+                bundle.get(
+                    "feature_columns",
+                    [],
+                )
+            ),
+            "confidenceThreshold": safe_float(
+                bundle.get(
+                    "confidence_threshold",
+                    0.55,
+                )
+            ),
+            "latestCandle": safe_string(
+                latest.get(
+                    "signal_time"
+                )
+            ),
+            "systemStatus": (
+                "Forward paper collection"
+                if ready["tradingReady"]
+                else "Not ready"
+            ),
+            "recentSignals":
+                recent_signals,
+            "strategyMode":
+                "Forward research",
+            "researchStatus":
+                "Frozen candidate",
+            "forecastHorizonMinutes":
+                int(
+                    bundle.get(
+                        "horizon_minutes",
+                        60,
+                    )
+                ),
+            "targetThresholdPct":
+                safe_float(
+                    bundle.get(
+                        "target_threshold",
+                        0.004,
+                    )
+                )
+                * 100,
+            "entryModel":
+                "Next 10m bar open",
+            "exitModel":
+                "Fixed 60m horizon close",
+            "primaryCostPct":
+                safe_float(
+                    bundle.get(
+                        "execution_costs",
+                        {},
+                    ).get(
+                        "mid",
+                        0.0014,
+                    )
+                )
+                * 100,
+            "stressCostPct":
+                safe_float(
+                    bundle.get(
+                        "execution_costs",
+                        {},
+                    ).get(
+                        "high",
+                        0.0027,
+                    )
+                )
+                * 100,
+            "forwardSignalCount":
+                int(len(trades)),
+            "closedForwardTrades":
+                int(len(closed)),
+            "evidenceNote": (
+                "Collecting genuinely new forward "
+                "paper evidence. Do not tune the "
+                "frozen model against these results."
+            ),
+        }
+
     latest = trades.iloc[-1]
 
     closed = trades[
@@ -207,8 +440,6 @@ def get_dashboard(
             }
         )
 
-    ready = get_ready_state(config.key)
-
     return {
         "symbol": "BTC / USDT",
         "timeframe": display_timeframe(config.key),
@@ -246,6 +477,19 @@ def get_dashboard(
             else "Not ready"
         ),
         "recentSignals": recent_signals,
+        "strategyMode": "Paper account",
+        "researchStatus": "Locked benchmark",
+        "forecastHorizonMinutes": 60,
+        "targetThresholdPct": 0.20,
+        "entryModel": "Signal candle close",
+        "exitModel": "1h risk-managed paper exit",
+        "primaryCostPct": 0.05,
+        "stressCostPct": 0.05,
+        "forwardSignalCount": int(len(trades)),
+        "closedForwardTrades": int(len(closed)),
+        "evidenceNote": (
+            "Existing locked 1h benchmark strategy."
+        ),
     }
 
 
