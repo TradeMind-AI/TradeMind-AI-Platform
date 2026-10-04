@@ -1,6 +1,17 @@
-export type TradingSignal = 'BUY' | 'SELL' | 'HOLD'
+export type TradingSignal =
+  'BUY' | 'SELL' | 'HOLD'
 
-export type Prediction = 'UP' | 'DOWN' | 'NEUTRAL'
+export type Prediction =
+  'UP' | 'DOWN' | 'NEUTRAL'
+
+export type StrategyTimeframe =
+  | '1m'
+  | '2m'
+  | '5m'
+  | '10m'
+  | '20m'
+  | '30m'
+  | '1h'
 
 export type ProbabilitySet = {
   down: number
@@ -19,6 +30,7 @@ export type RecentSignal = {
 export type TradingDashboardData = {
   symbol: string
   timeframe: string
+  timeframeKey: StrategyTimeframe
   price: number
   prediction: Prediction
   confidence: number
@@ -33,4 +45,14 @@ export type TradingDashboardData = {
   latestCandle: string
   systemStatus: string
   recentSignals: RecentSignal[]
+}
+
+export type TimeframeStatus = {
+  timeframe: StrategyTimeframe
+  label: string
+  marketReady: boolean
+  featuresReady: boolean
+  modelReady: boolean
+  paperLogReady: boolean
+  tradingReady: boolean
 }
