@@ -3,7 +3,7 @@ import type {
 } from '../components/dashboard/BTCChart'
 
 import type {
-  StrategyTimeframe,
+  ChartTimeframe,
 } from '../types/trading'
 
 
@@ -14,7 +14,7 @@ const API_BASE_URL =
 export const getBTCCandles =
   async (
     timeframe:
-      StrategyTimeframe = '1h',
+      ChartTimeframe = '10m',
     limit = 200,
   ): Promise<BTCCandle[]> => {
     const params =
