@@ -59,6 +59,14 @@ def _paper_log(key: str) -> Path:
             / "paper_trades.csv"
         )
 
+    if key == "10m":
+        return (
+            PROJECT_ROOT
+            / "data"
+            / "processed"
+            / "paper_forward_10m.csv"
+        )
+
     return (
         PROJECT_ROOT
         / "data"
