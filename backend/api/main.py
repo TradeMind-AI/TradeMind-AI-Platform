@@ -2,6 +2,7 @@ from pathlib import Path
 
 import joblib
 import pandas as pd
+import requests
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -493,64 +494,263 @@ def get_dashboard(
     }
 
 
-@app.get("/api/market/btc")
-def get_btc_market(
-    timeframe: str = Query(default="1h"),
-    limit: int = Query(
-        default=200,
-        ge=1,
-        le=1000,
-    ),
-):
-    try:
-        config = get_timeframe_config(timeframe)
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=400,
-            detail=str(exc),
-        ) from exc
+CHART_TIMEFRAME_MINUTES = {
+    "1m": 1,
+    "2m": 2,
+    "3m": 3,
+    "5m": 5,
+    "10m": 10,
+    "15m": 15,
+    "20m": 20,
+    "30m": 30,
+    "1h": 60,
+    "4h": 240,
+    "1d": 1440,
+}
 
-    if not config.market_file.exists():
-        raise HTTPException(
-            status_code=409,
-            detail=(
-                f"{config.key} market data is not ready. "
-                "Generate it from the base 1-minute "
-                "dataset first."
-            ),
+BINANCE_SPOT_BASE_URL = (
+    "https://data-api.binance.vision"
+)
+
+BINANCE_KLINES_ENDPOINT = (
+    "/api/v3/klines"
+)
+
+
+def fetch_recent_1m_chart_data(
+    required_rows: int,
+) -> pd.DataFrame:
+    rows = []
+    end_time = None
+
+    while len(rows) < required_rows:
+        batch_limit = min(
+            1000,
+            required_rows - len(rows),
         )
 
-    df = pd.read_csv(config.market_file)
+        params = {
+            "symbol": "BTCUSDT",
+            "interval": "1m",
+            "limit": batch_limit,
+        }
 
-    required_columns = {
+        if end_time is not None:
+            params["endTime"] = end_time
+
+        response = requests.get(
+            BINANCE_SPOT_BASE_URL
+            + BINANCE_KLINES_ENDPOINT,
+            params=params,
+            timeout=20,
+        )
+
+        response.raise_for_status()
+
+        batch = response.json()
+
+        if not batch:
+            break
+
+        rows = batch + rows
+
+        oldest_open = int(
+            batch[0][0]
+        )
+
+        end_time = (
+            oldest_open - 1
+        )
+
+        if len(batch) < batch_limit:
+            break
+
+    columns = [
         "open_time",
         "open",
         "high",
         "low",
         "close",
         "volume",
-    }
+        "close_time",
+        "quote_asset_volume",
+        "number_of_trades",
+        "taker_buy_base_volume",
+        "taker_buy_quote_volume",
+        "ignore",
+    ]
 
-    missing = required_columns - set(df.columns)
+    df = pd.DataFrame(
+        rows,
+        columns=columns,
+    )
 
-    if missing:
-        raise HTTPException(
-            status_code=500,
-            detail=(
-                "Missing BTC columns: "
-                + ", ".join(sorted(missing))
-            ),
-        )
-
-    df = df.tail(limit).copy()
+    if df.empty:
+        return df
 
     df["open_time"] = pd.to_datetime(
         df["open_time"],
+        unit="ms",
         utc=True,
-        errors="coerce",
     )
 
-    df = df.dropna(subset=["open_time"])
+    for column in [
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume",
+    ]:
+        df[column] = pd.to_numeric(
+            df[column],
+            errors="coerce",
+        )
+
+    return (
+        df.dropna(
+            subset=[
+                "open_time",
+                "open",
+                "high",
+                "low",
+                "close",
+                "volume",
+            ]
+        )
+        .drop_duplicates(
+            subset=["open_time"],
+            keep="last",
+        )
+        .sort_values("open_time")
+        .reset_index(drop=True)
+    )
+
+
+def resample_chart_data(
+    base: pd.DataFrame,
+    timeframe: str,
+) -> pd.DataFrame:
+    minutes = (
+        CHART_TIMEFRAME_MINUTES[
+            timeframe
+        ]
+    )
+
+    if minutes == 1:
+        return base.copy()
+
+    rule = (
+        "1d"
+        if timeframe == "1d"
+        else (
+            f"{minutes}min"
+        )
+    )
+
+    indexed = base.set_index(
+        "open_time"
+    )
+
+    result = (
+        indexed.resample(
+            rule,
+            label="left",
+            closed="left",
+            origin="epoch",
+        )
+        .agg(
+            {
+                "open": "first",
+                "high": "max",
+                "low": "min",
+                "close": "last",
+                "volume": "sum",
+            }
+        )
+        .dropna(
+            subset=[
+                "open",
+                "high",
+                "low",
+                "close",
+            ]
+        )
+        .reset_index()
+    )
+
+    return result
+
+
+@app.get("/api/market/btc")
+def get_btc_market(
+    timeframe: str = Query(default="10m"),
+    limit: int = Query(
+        default=300,
+        ge=1,
+        le=500,
+    ),
+):
+    normalized = (
+        timeframe.strip().lower()
+    )
+
+    if (
+        normalized
+        not in CHART_TIMEFRAME_MINUTES
+    ):
+        supported = ", ".join(
+            CHART_TIMEFRAME_MINUTES
+        )
+
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Unsupported chart timeframe "
+                f"'{timeframe}'. Supported: "
+                f"{supported}"
+            ),
+        )
+
+    minutes = (
+        CHART_TIMEFRAME_MINUTES[
+            normalized
+        ]
+    )
+
+    # Extra source rows ensure the first aggregated
+    # chart candle is complete enough for display.
+    required_1m_rows = min(
+        10000,
+        limit * minutes
+        + minutes * 2,
+    )
+
+    try:
+        base = fetch_recent_1m_chart_data(
+            required_1m_rows
+        )
+    except requests.RequestException as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                "Live BTC chart data request "
+                "to Binance failed."
+            ),
+        ) from exc
+
+    if base.empty:
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                "No live BTC chart data "
+                "was returned."
+            ),
+        )
+
+    df = resample_chart_data(
+        base,
+        normalized,
+    ).tail(limit)
 
     candles = []
 
@@ -558,13 +758,25 @@ def get_btc_market(
         candles.append(
             {
                 "time": int(
-                    row["open_time"].timestamp()
+                    row[
+                        "open_time"
+                    ].timestamp()
                 ),
-                "open": float(row["open"]),
-                "high": float(row["high"]),
-                "low": float(row["low"]),
-                "close": float(row["close"]),
-                "volume": float(row["volume"]),
+                "open": float(
+                    row["open"]
+                ),
+                "high": float(
+                    row["high"]
+                ),
+                "low": float(
+                    row["low"]
+                ),
+                "close": float(
+                    row["close"]
+                ),
+                "volume": float(
+                    row["volume"]
+                ),
             }
         )
 
