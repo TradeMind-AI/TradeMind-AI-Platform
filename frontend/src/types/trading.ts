@@ -16,6 +16,19 @@ export type StrategyTimeframe =
   | '30m'
   | '1h'
 
+export type ChartTimeframe =
+  | '1m'
+  | '2m'
+  | '3m'
+  | '5m'
+  | '10m'
+  | '15m'
+  | '20m'
+  | '30m'
+  | '1h'
+  | '4h'
+  | '1d'
+
 export type ProbabilitySet = {
   down: number
   neutral: number
