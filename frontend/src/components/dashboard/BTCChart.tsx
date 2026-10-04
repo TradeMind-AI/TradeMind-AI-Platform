@@ -247,9 +247,7 @@ const BTCChart = ({
       CandlestickData[] =
       candles.map(
         (candle) => ({
-          time:
-            candle.time
-            as UTCTimestamp,
+          time: candle.time as UTCTimestamp,
           open: candle.open,
           high: candle.high,
           low: candle.low,
