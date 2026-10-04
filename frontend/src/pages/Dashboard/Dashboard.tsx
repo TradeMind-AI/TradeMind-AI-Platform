@@ -25,6 +25,9 @@ import StatCard
 import SystemStatus
   from '../../components/dashboard/SystemStatus'
 
+import StrategyResearch
+  from '../../components/dashboard/StrategyResearch'
+
 import {
   getDashboardData,
   getTimeframeStatus,
@@ -350,7 +353,7 @@ const Dashboard = () => {
                   <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                     <StatCard
                       label="BTC Price"
-                      value={`$${dashboardData.price.toLocaleString(
+                      value={`${dashboardData.price.toLocaleString(
                         'en-US',
                         {
                           minimumFractionDigits: 2,
@@ -360,33 +363,66 @@ const Dashboard = () => {
                       subtext={`Latest closed ${dashboardData.timeframe} candle`}
                     />
 
-                    <StatCard
-                      label="Paper Balance"
-                      value={`$${dashboardData.balance.toLocaleString(
-                        'en-US',
-                        {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        },
-                      )}`}
-                      subtext="Simulated account"
-                    />
+                    {dashboardData.strategyMode
+                      === 'Forward research'
+                      ? (
+                        <>
+                          <StatCard
+                            label="Forward Decisions"
+                            value={String(
+                              dashboardData.forwardSignalCount,
+                            )}
+                            subtext="Frozen model decisions recorded"
+                          />
 
-                    <StatCard
-                      label="Win Rate"
-                      value={`${dashboardData.winRate.toFixed(
-                        2,
-                      )}%`}
-                      subtext="Closed paper trades"
-                    />
+                          <StatCard
+                            label="Closed Trades"
+                            value={String(
+                              dashboardData.closedForwardTrades,
+                            )}
+                            subtext="Completed 60m paper outcomes"
+                          />
 
-                    <StatCard
-                      label="Net Return"
-                      value={`${dashboardData.netReturn.toFixed(
-                        2,
-                      )}%`}
-                      subtext="After trading costs"
-                    />
+                          <StatCard
+                            label="Mid-Cost Net"
+                            value={`${dashboardData.netReturn.toFixed(
+                              2,
+                            )}%`}
+                            subtext="Using 0.14% round-trip cost assumption"
+                          />
+                        </>
+                      )
+                      : (
+                        <>
+                          <StatCard
+                            label="Paper Balance"
+                            value={`${dashboardData.balance.toLocaleString(
+                              'en-US',
+                              {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              },
+                            )}`}
+                            subtext="Simulated account"
+                          />
+
+                          <StatCard
+                            label="Win Rate"
+                            value={`${dashboardData.winRate.toFixed(
+                              2,
+                            )}%`}
+                            subtext="Closed paper trades"
+                          />
+
+                          <StatCard
+                            label="Net Return"
+                            value={`${dashboardData.netReturn.toFixed(
+                              2,
+                            )}%`}
+                            subtext="After trading costs"
+                          />
+                        </>
+                      )}
                   </div>
 
 
@@ -422,6 +458,12 @@ const Dashboard = () => {
                     />
                   </div>
 
+
+                  <div className="mt-6">
+                    <StrategyResearch
+                      data={dashboardData}
+                    />
+                  </div>
 
                   <div className="mt-6">
                     <RecentSignals
