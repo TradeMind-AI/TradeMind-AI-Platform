@@ -1,5 +1,8 @@
 export type TradingSignal =
-  'BUY' | 'SELL' | 'HOLD'
+  | 'BUY'
+  | 'SELL'
+  | 'HOLD'
+  | 'SKIP_OVERLAP'
 
 export type Prediction =
   'UP' | 'DOWN' | 'NEUTRAL'
@@ -45,6 +48,17 @@ export type TradingDashboardData = {
   latestCandle: string
   systemStatus: string
   recentSignals: RecentSignal[]
+  strategyMode: string
+  researchStatus: string
+  forecastHorizonMinutes: number
+  targetThresholdPct: number
+  entryModel: string
+  exitModel: string
+  primaryCostPct: number
+  stressCostPct: number
+  forwardSignalCount: number
+  closedForwardTrades: number
+  evidenceNote: string
 }
 
 export type TimeframeStatus = {
