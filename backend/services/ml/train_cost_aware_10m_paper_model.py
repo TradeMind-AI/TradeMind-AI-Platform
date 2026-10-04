@@ -29,6 +29,14 @@ HORIZON_MINUTES = 60
 TARGET_THRESHOLD = 0.0040
 CONFIDENCE_THRESHOLD = 0.55
 
+# Match the extended-history research universe.
+# Starting after the verified March 24, 2023 Binance spot outage
+# prevents rolling/lagged features from bridging that market-data gap.
+RESEARCH_START = pd.Timestamp(
+    "2023-03-26",
+    tz="UTC",
+)
+
 NON_FEATURE_COLUMNS = {
     "open_time",
     "close_time",
@@ -89,6 +97,10 @@ def main() -> None:
         )
         .reset_index(drop=True)
     )
+
+    df = df[
+        df["open_time"] >= RESEARCH_START
+    ].copy().reset_index(drop=True)
 
     feature_columns = [
         column
