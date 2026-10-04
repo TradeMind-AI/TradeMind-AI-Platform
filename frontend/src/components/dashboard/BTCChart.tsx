@@ -259,9 +259,7 @@ const BTCChart = ({
       HistogramData[] =
       candles.map(
         (candle) => ({
-          time:
-            candle.time
-            as UTCTimestamp,
+          time: candle.time as UTCTimestamp,
           value: candle.volume,
           color:
             candle.close
