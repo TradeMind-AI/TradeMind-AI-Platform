@@ -25,11 +25,13 @@ export type BTCCandle = {
 
 type BTCChartProps = {
   candles: BTCCandle[]
+  timeframe: string
 }
 
 
 const BTCChart = ({
   candles,
+  timeframe,
 }: BTCChartProps) => {
   const chartContainerRef =
     useRef<HTMLDivElement | null>(null)
@@ -93,23 +95,26 @@ const BTCChart = ({
         {
           upColor: '#22c55e',
           downColor: '#ef4444',
-
           borderVisible: false,
-
           wickUpColor: '#22c55e',
           wickDownColor: '#ef4444',
         },
       )
 
 
-    const candleData: CandlestickData[] =
-      candles.map((candle) => ({
-        time: candle.time as UTCTimestamp,
-        open: candle.open,
-        high: candle.high,
-        low: candle.low,
-        close: candle.close,
-      }))
+    const candleData:
+      CandlestickData[] =
+      candles.map(
+        (candle) => ({
+          time:
+            candle.time
+            as UTCTimestamp,
+          open: candle.open,
+          high: candle.high,
+          low: candle.low,
+          close: candle.close,
+        }),
+      )
 
 
     candleSeries.setData(
@@ -122,7 +127,6 @@ const BTCChart = ({
         HistogramSeries,
         {
           priceScaleId: '',
-
           priceFormat: {
             type: 'volume',
           },
@@ -140,25 +144,29 @@ const BTCChart = ({
       })
 
 
-    const volumeData: HistogramData[] =
-      candles.map((candle) => ({
-        time: candle.time as UTCTimestamp,
-        value: candle.volume,
-
-        color:
-          candle.close >= candle.open
-            ? 'rgba(34,197,94,0.35)'
-            : 'rgba(239,68,68,0.35)',
-      }))
+    const volumeData:
+      HistogramData[] =
+      candles.map(
+        (candle) => ({
+          time:
+            candle.time
+            as UTCTimestamp,
+          value:
+            candle.volume,
+          color:
+            candle.close
+              >= candle.open
+              ? 'rgba(34,197,94,0.35)'
+              : 'rgba(239,68,68,0.35)',
+        }),
+      )
 
 
     volumeSeries.setData(
       volumeData,
     )
 
-
     chart.timeScale().fitContent()
-
 
     const resizeObserver =
       new ResizeObserver(() => {
@@ -168,11 +176,9 @@ const BTCChart = ({
         })
       })
 
-
     resizeObserver.observe(
       container,
     )
-
 
     return () => {
       resizeObserver.disconnect()
@@ -195,7 +201,7 @@ const BTCChart = ({
         </div>
 
         <span className="rounded-md bg-white/5 px-3 py-1.5 text-xs text-white/40">
-          1H
+          {timeframe}
         </span>
       </div>
 
