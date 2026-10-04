@@ -83,3 +83,15 @@ export type TimeframeStatus = {
   paperLogReady: boolean
   tradingReady: boolean
 }
+
+
+export type AIIndicatorPoint = {
+  time: number
+  score: number
+  up: number
+  neutral: number
+  down: number
+  confidence: number
+  prediction: Prediction
+  signal: TradingSignal
+}
