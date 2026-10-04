@@ -82,6 +82,11 @@ def aggregate_timeframe(
 ) -> pd.DataFrame:
     indexed = base.set_index("open_time")
 
+    expected_minutes = int(
+        pd.to_timedelta(rule)
+        / pd.Timedelta(minutes=1)
+    )
+
     aggregations: dict[str, str] = {
         "open": "first",
         "high": "max",
@@ -101,15 +106,37 @@ def aggregate_timeframe(
         if column in indexed.columns:
             aggregations[column] = "sum"
 
+    grouped = indexed.resample(
+        rule,
+        label="left",
+        closed="left",
+        origin="epoch",
+    )
+
+    resampled = grouped.agg(
+        aggregations
+    )
+
+    source_counts = grouped[
+        "close"
+    ].count()
+
+    complete_mask = (
+        source_counts
+        == expected_minutes
+    )
+
+    incomplete_count = int(
+        (
+            (source_counts > 0)
+            & (~complete_mask)
+        ).sum()
+    )
+
     resampled = (
-        indexed
-        .resample(
-            rule,
-            label="left",
-            closed="left",
-            origin="epoch",
-        )
-        .agg(aggregations)
+        resampled.loc[
+            complete_mask
+        ]
         .dropna(
             subset=[
                 "open",
@@ -120,6 +147,13 @@ def aggregate_timeframe(
         )
         .reset_index()
     )
+
+    if incomplete_count:
+        print(
+            f"  dropped {incomplete_count:,} "
+            f"incomplete {rule} candle(s) "
+            f"caused by missing 1m source data"
+        )
 
     if "number_of_trades" not in resampled.columns:
         resampled["number_of_trades"] = 0
