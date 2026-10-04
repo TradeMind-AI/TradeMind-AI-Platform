@@ -1,7 +1,17 @@
 from pathlib import Path
+import sys
 
 import numpy as np
 import pandas as pd
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(
+        0,
+        str(PROJECT_ROOT),
+    )
 
 from backend.services.data_pipeline.feature_engineering_1m import (
     create_candle_features,
@@ -16,8 +26,6 @@ from backend.services.data_pipeline.feature_engineering_1m import (
     load_data,
 )
 
-
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
 OUTPUT_FILE = (
     PROJECT_ROOT
