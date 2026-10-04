@@ -216,3 +216,10 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Generated market datasets
+data/raw/*.csv
+data/processed/*.csv
+data/processed/ml_splits/
+
+
