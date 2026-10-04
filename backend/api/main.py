@@ -495,6 +495,222 @@ def get_dashboard(
     }
 
 
+@app.get("/api/indicator/ai")
+def get_ai_indicator(
+    timeframe: str = Query(
+        default="10m",
+        description=(
+            "AI strategy timeframe. "
+            "Currently only the frozen 10m "
+            "forward model is exposed."
+        ),
+    ),
+    limit: int = Query(
+        default=200,
+        ge=1,
+        le=500,
+    ),
+):
+    normalized = (
+        timeframe.strip().lower()
+    )
+
+    if normalized != "10m":
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "AI overlay is currently available "
+                "for the frozen 10m strategy only."
+            ),
+        )
+
+    config = get_timeframe_config(
+        normalized
+    )
+
+    if (
+        not config.model_file.exists()
+        or not config.feature_file.exists()
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "10m AI overlay is not ready. "
+                "Model or live feature file missing."
+            ),
+        )
+
+    bundle = joblib.load(
+        config.model_file
+    )
+
+    features = pd.read_csv(
+        config.feature_file
+    )
+
+    if features.empty:
+        return []
+
+    features["open_time"] = pd.to_datetime(
+        features["open_time"],
+        utc=True,
+        errors="coerce",
+    )
+
+    features = (
+        features.dropna(
+            subset=["open_time"]
+        )
+        .sort_values("open_time")
+        .reset_index(drop=True)
+    )
+
+    training_end = pd.to_datetime(
+        bundle.get(
+            "training_end"
+        ),
+        utc=True,
+        errors="coerce",
+    )
+
+    if pd.notna(training_end):
+        features = features[
+            features["open_time"]
+            > training_end
+        ].copy()
+
+    if features.empty:
+        return []
+
+    features = features.tail(
+        limit
+    ).copy()
+
+    feature_columns = bundle[
+        "feature_columns"
+    ]
+
+    missing = [
+        column
+        for column in feature_columns
+        if column not in features.columns
+    ]
+
+    if missing:
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "AI overlay feature mismatch: "
+                + ", ".join(
+                    missing[:10]
+                )
+            ),
+        )
+
+    X = features[
+        feature_columns
+    ]
+
+    model = bundle["model"]
+    encoder = bundle["encoder"]
+
+    probabilities = (
+        model.predict_proba(X)
+    )
+
+    encoded = model.predict(X)
+
+    predictions = (
+        encoder.inverse_transform(
+            encoded
+        )
+    )
+
+    class_index = {
+        name: index
+        for index, name
+        in enumerate(
+            encoder.classes_
+        )
+    }
+
+    threshold = float(
+        bundle.get(
+            "confidence_threshold",
+            0.55,
+        )
+    )
+
+    points = []
+
+    for row_index, (_, row) in enumerate(
+        features.iterrows()
+    ):
+        down = float(
+            probabilities[
+                row_index,
+                class_index["DOWN"],
+            ]
+        )
+
+        neutral = float(
+            probabilities[
+                row_index,
+                class_index["NEUTRAL"],
+            ]
+        )
+
+        up = float(
+            probabilities[
+                row_index,
+                class_index["UP"],
+            ]
+        )
+
+        confidence = float(
+            probabilities[
+                row_index
+            ].max()
+        )
+
+        prediction = str(
+            predictions[
+                row_index
+            ]
+        )
+
+        signal = "HOLD"
+
+        if confidence >= threshold:
+            if prediction == "UP":
+                signal = "BUY"
+            elif prediction == "DOWN":
+                signal = "SELL"
+
+        points.append(
+            {
+                "time": int(
+                    row[
+                        "open_time"
+                    ].timestamp()
+                ),
+                "score": (
+                    up - down
+                ),
+                "up": up,
+                "neutral": neutral,
+                "down": down,
+                "confidence":
+                    confidence,
+                "prediction":
+                    prediction,
+                "signal": signal,
+            }
+        )
+
+    return points
+
+
 CHART_TIMEFRAME_MINUTES = {
     "1m": 1,
     "2m": 2,
