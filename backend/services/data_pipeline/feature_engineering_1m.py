@@ -615,8 +615,7 @@ def main() -> None:
     )
 
     print(
-        "
-1-minute future return statistics:"
+        "\n1-minute future return statistics:"
     )
 
     print(
@@ -648,10 +647,8 @@ def main() -> None:
     )
 
     print(
-        f"
-Saved:"
-        f"
-{OUTPUT_FILE}"
+        f"\nSaved:"
+        f"\n{OUTPUT_FILE}"
     )
 
 
