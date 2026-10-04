@@ -309,8 +309,7 @@ def main() -> None:
         TARGET_THRESHOLDS
     ):
         print(
-            "
-"
+            "\n"
             + "=" * 80
         )
 
@@ -500,8 +499,7 @@ def main() -> None:
     )
 
     print(
-        "
-"
+        "\n"
         + "=" * 120
     )
 
@@ -567,21 +565,17 @@ def main() -> None:
     )
 
     print(
-        "
-Round-trip cost assumption: "
+        "\nRound-trip cost assumption: "
         f"{ROUND_TRIP_COST * 100:.2f}%"
     )
 
     print(
-        "
-TEST SPLIT WAS NOT USED."
+        "\nTEST SPLIT WAS NOT USED."
     )
 
     print(
-        f"
-Full results saved to:"
-        f"
-{output_file}"
+        f"\nFull results saved to:"
+        f"\n{output_file}"
     )
 
 
