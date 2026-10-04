@@ -1,9 +1,11 @@
 import {
   CandlestickSeries,
   HistogramSeries,
+  LineSeries,
   createChart,
   type CandlestickData,
   type HistogramData,
+  type LineData,
   type UTCTimestamp,
 } from 'lightweight-charts'
 
@@ -13,6 +15,7 @@ import {
 } from 'react'
 
 import type {
+  AIIndicatorPoint,
   ChartTimeframe,
 } from '../../types/trading'
 
@@ -40,6 +43,12 @@ type VolumeSeriesHandle = {
   ) => void
 }
 
+type AISeriesHandle = {
+  setData: (
+    data: LineData[],
+  ) => void
+}
+
 
 type BTCChartProps = {
   candles: BTCCandle[]
@@ -49,6 +58,7 @@ type BTCChartProps = {
   ) => void
   loading?: boolean
   error?: string | null
+  aiPoints: AIIndicatorPoint[]
 }
 
 
@@ -74,6 +84,7 @@ const BTCChart = ({
   onTimeframeChange,
   loading = false,
   error = null,
+  aiPoints,
 }: BTCChartProps) => {
   const chartContainerRef =
     useRef<HTMLDivElement | null>(null)
@@ -90,6 +101,11 @@ const BTCChart = ({
 
   const volumeSeriesRef =
     useRef<VolumeSeriesHandle | null>(
+      null,
+    )
+
+  const aiSeriesRef =
+    useRef<AISeriesHandle | null>(
       null,
     )
 
@@ -202,6 +218,30 @@ const BTCChart = ({
     volumeSeriesRef.current =
       volumeSeries
 
+    const aiSeries =
+      chart.addSeries(
+        LineSeries,
+        {
+          priceScaleId: 'ai',
+          color: '#60a5fa',
+          lineWidth: 2,
+          priceLineVisible: false,
+          lastValueVisible: false,
+        },
+      )
+
+    chart.priceScale('ai')
+      .applyOptions({
+        visible: false,
+        scaleMargins: {
+          top: 0.08,
+          bottom: 0.58,
+        },
+      })
+
+    aiSeriesRef.current =
+      aiSeries
+
     const resizeObserver =
       new ResizeObserver(() => {
         chart.applyOptions({
@@ -221,6 +261,7 @@ const BTCChart = ({
       chartRef.current = null
       candleSeriesRef.current = null
       volumeSeriesRef.current = null
+      aiSeriesRef.current = null
     }
   }, [])
 
@@ -293,10 +334,41 @@ const BTCChart = ({
   ])
 
 
+  useEffect(() => {
+    const aiSeries =
+      aiSeriesRef.current
+
+    if (!aiSeries) {
+      return
+    }
+
+    const data:
+      LineData[] =
+      aiPoints.map(
+        (point) => ({
+          time: point.time as UTCTimestamp,
+          value:
+            point.score,
+        }),
+      )
+
+    aiSeries.setData(
+      data,
+    )
+  }, [aiPoints])
+
+
   const latest =
     candles.length > 0
       ? candles[
           candles.length - 1
+        ]
+      : null
+
+  const latestAI =
+    aiPoints.length > 0
+      ? aiPoints[
+          aiPoints.length - 1
         ]
       : null
 
@@ -337,8 +409,29 @@ const BTCChart = ({
           </div>
 
           <p className="mt-2 text-xs text-white/25">
-            Chart interval is independent from the AI strategy timeframe.
+            Candles are live. The blue overlay is the frozen 10m AI directional score.
           </p>
+
+          {latestAI && (
+            <div className="mt-3 flex flex-wrap items-center gap-3 text-xs">
+              <span className="rounded-md border border-blue-400/20 bg-blue-400/[0.07] px-2.5 py-1 text-blue-200">
+                AI score {latestAI.score >= 0 ? '+' : ''}
+                {latestAI.score.toFixed(3)}
+              </span>
+
+              <span className="text-white/30">
+                UP {(latestAI.up * 100).toFixed(1)}%
+              </span>
+
+              <span className="text-white/30">
+                DOWN {(latestAI.down * 100).toFixed(1)}%
+              </span>
+
+              <span className="text-white/30">
+                {latestAI.signal}
+              </span>
+            </div>
+          )}
         </div>
 
         <div>
@@ -398,7 +491,7 @@ const BTCChart = ({
         </span>
 
         <span>
-          Refreshes every 5 seconds.
+          Candles refresh every 5s · AI overlay updates on completed 10m model candles.
         </span>
       </div>
     </section>
