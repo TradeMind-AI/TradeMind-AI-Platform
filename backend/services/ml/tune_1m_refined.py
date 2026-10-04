@@ -264,14 +264,23 @@ def period_robustness(
         "open_time"
     ).reset_index(drop=True)
 
-    parts = np.array_split(
-        temp,
-        3,
+    boundaries = np.linspace(
+        0,
+        len(temp),
+        4,
+        dtype=int,
     )
 
     period_returns = []
 
-    for part in parts:
+    for index in range(3):
+        start = boundaries[index]
+        end = boundaries[index + 1]
+
+        part = temp.iloc[
+            start:end
+        ]
+
         if part.empty:
             period_returns.append(
                 0.0
