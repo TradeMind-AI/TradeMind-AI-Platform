@@ -351,6 +351,16 @@ def main() -> None:
         ),
     )
 
+    parser.add_argument(
+        "--allow-gaps",
+        action="store_true",
+        help=(
+            "Allow real exchange/data gaps to remain "
+            "in the merged dataset instead of aborting. "
+            "Gaps are reported and must not be interpolated."
+        ),
+    )
+
     args = parser.parse_args()
 
     if not args.input.exists():
@@ -507,10 +517,21 @@ def main() -> None:
             )
         )
 
-        raise RuntimeError(
-            "Combined dataset is not "
-            "continuous. Original file "
-            "was not replaced."
+        if not args.allow_gaps:
+            raise RuntimeError(
+                "Combined dataset contains "
+                "real missing intervals. Original file "
+                "was not replaced. Re-run with "
+                "--allow-gaps only after verifying the "
+                "gap is a genuine exchange/data outage. "
+                "Do not interpolate missing market candles."
+            )
+
+        print()
+        print(
+            "WARNING: gaps are being preserved exactly "
+            "as missing market data. No synthetic candles "
+            "will be created."
         )
 
     if (
@@ -581,9 +602,15 @@ def main() -> None:
         f"{combined['open_time'].iloc[-1]}"
     )
 
-    print(
-        "Continuity check: PASSED"
-    )
+    if gap_count:
+        print(
+            f"Continuity check: {gap_count} "
+            f"real gap(s) preserved"
+        )
+    else:
+        print(
+            "Continuity check: PASSED"
+        )
 
 
 if __name__ == "__main__":
