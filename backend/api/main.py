@@ -517,6 +517,98 @@ BINANCE_KLINES_ENDPOINT = (
 )
 
 
+NATIVE_BINANCE_CHART_INTERVALS = {
+    "1m",
+    "3m",
+    "5m",
+    "15m",
+    "30m",
+    "1h",
+    "4h",
+    "1d",
+}
+
+
+def fetch_native_chart_data(
+    timeframe: str,
+    limit: int,
+) -> pd.DataFrame:
+    response = requests.get(
+        BINANCE_SPOT_BASE_URL
+        + BINANCE_KLINES_ENDPOINT,
+        params={
+            "symbol": "BTCUSDT",
+            "interval": timeframe,
+            "limit": limit,
+        },
+        timeout=20,
+    )
+
+    response.raise_for_status()
+
+    rows = response.json()
+
+    columns = [
+        "open_time",
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume",
+        "close_time",
+        "quote_asset_volume",
+        "number_of_trades",
+        "taker_buy_base_volume",
+        "taker_buy_quote_volume",
+        "ignore",
+    ]
+
+    df = pd.DataFrame(
+        rows,
+        columns=columns,
+    )
+
+    if df.empty:
+        return df
+
+    df["open_time"] = pd.to_datetime(
+        df["open_time"],
+        unit="ms",
+        utc=True,
+    )
+
+    for column in [
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume",
+    ]:
+        df[column] = pd.to_numeric(
+            df[column],
+            errors="coerce",
+        )
+
+    return (
+        df.dropna(
+            subset=[
+                "open_time",
+                "open",
+                "high",
+                "low",
+                "close",
+                "volume",
+            ]
+        )
+        .drop_duplicates(
+            subset=["open_time"],
+            keep="last",
+        )
+        .sort_values("open_time")
+        .reset_index(drop=True)
+    )
+
+
 def fetch_recent_1m_chart_data(
     required_rows: int,
 ) -> pd.DataFrame:
@@ -726,9 +818,32 @@ def get_btc_market(
     )
 
     try:
-        base = fetch_recent_1m_chart_data(
-            required_1m_rows
-        )
+        if (
+            normalized
+            in NATIVE_BINANCE_CHART_INTERVALS
+        ):
+            df = fetch_native_chart_data(
+                normalized,
+                limit,
+            )
+        else:
+            base = fetch_recent_1m_chart_data(
+                required_1m_rows
+            )
+
+            if base.empty:
+                raise HTTPException(
+                    status_code=502,
+                    detail=(
+                        "No live BTC chart data "
+                        "was returned."
+                    ),
+                )
+
+            df = resample_chart_data(
+                base,
+                normalized,
+            ).tail(limit)
     except requests.RequestException as exc:
         raise HTTPException(
             status_code=502,
@@ -738,7 +853,7 @@ def get_btc_market(
             ),
         ) from exc
 
-    if base.empty:
+    if df.empty:
         raise HTTPException(
             status_code=502,
             detail=(
@@ -746,11 +861,6 @@ def get_btc_market(
                 "was returned."
             ),
         )
-
-    df = resample_chart_data(
-        base,
-        normalized,
-    ).tail(limit)
 
     candles = []
 
