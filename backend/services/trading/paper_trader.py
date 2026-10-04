@@ -3,6 +3,8 @@ from pathlib import Path
 import joblib
 import pandas as pd
 
+from risk_manager import evaluate_trade
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
@@ -28,23 +30,87 @@ PAPER_LOG = (
 )
 
 
+LOG_COLUMNS = [
+    "timestamp",
+    "price",
+    "prediction",
+    "confidence",
+    "probability_down",
+    "probability_neutral",
+    "probability_up",
+    "signal",
+    "model_name",
+    "status",
+
+    "risk_status",
+    "risk_reason",
+
+    "account_balance_before",
+    "risk_amount",
+    "position_notional",
+    "quantity",
+
+    "stop_loss_price",
+    "take_profit_price",
+
+    "entry_price",
+    "exit_price",
+    "exit_reason",
+
+    "gross_return_pct",
+    "fee_pct",
+    "net_return_pct",
+
+    "account_pnl",
+    "account_balance_after",
+
+    "result",
+    "cumulative_net_return_pct",
+]
+
+
 def load_model_bundle():
     if not MODEL_FILE.exists():
         raise FileNotFoundError(
-            f"Model not found:\n{MODEL_FILE}\n"
-            "Run train_locked_model.py first."
+            f"Model not found:\n{MODEL_FILE}"
         )
 
-    return joblib.load(MODEL_FILE)
+    return joblib.load(
+        MODEL_FILE
+    )
 
 
-def load_latest_market_row(feature_columns):
+def load_paper_log():
+    if not PAPER_LOG.exists():
+        return pd.DataFrame(
+            columns=LOG_COLUMNS
+        )
+
+    log = pd.read_csv(
+        PAPER_LOG
+    )
+
+    for column in LOG_COLUMNS:
+        if column not in log.columns:
+            log[column] = pd.NA
+
+    return log[
+        LOG_COLUMNS
+    ].copy()
+
+
+def load_latest_market_row(
+    feature_columns,
+):
     if not FEATURE_FILE.exists():
         raise FileNotFoundError(
-            f"Feature dataset not found:\n{FEATURE_FILE}"
+            f"Live feature dataset not found:\n"
+            f"{FEATURE_FILE}"
         )
 
-    df = pd.read_csv(FEATURE_FILE)
+    df = pd.read_csv(
+        FEATURE_FILE
+    )
 
     df["open_time"] = pd.to_datetime(
         df["open_time"],
@@ -79,30 +145,30 @@ def load_latest_market_row(feature_columns):
     )
 
     if X_latest.isna().any().any():
-        bad_columns = X_latest.columns[
+
+        bad = X_latest.columns[
             X_latest.isna().any()
         ].tolist()
 
         raise ValueError(
             "Latest row contains NaN values "
-            f"in features: {bad_columns}"
+            f"in features: {bad}"
         )
 
     return latest, X_latest
 
 
-def already_logged(timestamp):
-    if not PAPER_LOG.exists():
-        return False
-
-    log = pd.read_csv(PAPER_LOG)
-
+def already_logged(
+    log: pd.DataFrame,
+    timestamp,
+):
     if log.empty:
         return False
 
-    log["timestamp"] = pd.to_datetime(
+    timestamps = pd.to_datetime(
         log["timestamp"],
         utc=True,
+        errors="coerce",
     )
 
     timestamp = pd.to_datetime(
@@ -111,30 +177,44 @@ def already_logged(timestamp):
     )
 
     return timestamp in set(
-        log["timestamp"]
+        timestamps.dropna()
     )
 
 
-def save_signal(row):
+def save_log(
+    log: pd.DataFrame,
+    row: dict,
+):
+    new_row = pd.DataFrame(
+        [row]
+    )
+
+    for column in LOG_COLUMNS:
+
+        if column not in new_row.columns:
+            new_row[column] = pd.NA
+
+    new_row = new_row[
+        LOG_COLUMNS
+    ]
+
+    combined = pd.concat(
+        [
+            log,
+            new_row,
+        ],
+        ignore_index=True,
+    )
+
     PAPER_LOG.parent.mkdir(
         parents=True,
         exist_ok=True,
     )
 
-    new_row = pd.DataFrame([row])
-
-    if PAPER_LOG.exists():
-        new_row.to_csv(
-            PAPER_LOG,
-            mode="a",
-            header=False,
-            index=False,
-        )
-    else:
-        new_row.to_csv(
-            PAPER_LOG,
-            index=False,
-        )
+    combined.to_csv(
+        PAPER_LOG,
+        index=False,
+    )
 
 
 def main():
@@ -146,23 +226,35 @@ def main():
 
     model = bundle["model"]
     encoder = bundle["encoder"]
-    feature_columns = bundle["feature_columns"]
 
-    confidence_threshold = (
+    feature_columns = (
+        bundle["feature_columns"]
+    )
+
+    confidence_threshold = float(
         bundle["confidence_threshold"]
     )
 
-    latest, X_latest = load_latest_market_row(
-        feature_columns
+    latest, X_latest = (
+        load_latest_market_row(
+            feature_columns
+        )
     )
 
-    timestamp = latest["open_time"]
+    timestamp = latest[
+        "open_time"
+    ]
 
     print(
         f"\nLatest candle: {timestamp}"
     )
 
-    if already_logged(timestamp):
+    log = load_paper_log()
+
+    if already_logged(
+        log,
+        timestamp,
+    ):
         print(
             "Signal already generated "
             "for this candle."
@@ -184,9 +276,11 @@ def main():
     )
 
     class_index = {
-        class_name: index
-        for index, class_name
-        in enumerate(encoder.classes_)
+        name: index
+        for index, name
+        in enumerate(
+            encoder.classes_
+        )
     }
 
     probability_down = float(
@@ -211,78 +305,212 @@ def main():
         probabilities.max()
     )
 
-    signal = "HOLD"
+    model_signal = "HOLD"
 
     if confidence >= confidence_threshold:
+
         if prediction == "UP":
-            signal = "BUY"
+            model_signal = "BUY"
 
         elif prediction == "DOWN":
-            signal = "SELL"
+            model_signal = "SELL"
 
     price = float(
         latest["close"]
     )
 
-    print("\n" + "=" * 60)
+    # --------------------------------------------------------
+    # Risk management
+    # --------------------------------------------------------
+
+    risk = evaluate_trade(
+        signal=model_signal,
+        entry_price=price,
+        timestamp=timestamp,
+        paper_log=log,
+    )
+
+    final_signal = model_signal
+
+    if (
+        model_signal in {"BUY", "SELL"}
+        and not risk.allowed
+    ):
+        final_signal = "HOLD"
+
+    if final_signal in {"BUY", "SELL"}:
+        status = "OPEN"
+        risk_status = "APPROVED"
+    else:
+        status = "NO_TRADE"
+
+        if model_signal == "HOLD":
+            risk_status = "NOT_REQUIRED"
+        else:
+            risk_status = "BLOCKED"
+
+    print("\n" + "=" * 70)
     print("PAPER TRADING SIGNAL")
-    print("=" * 60)
+    print("=" * 70)
 
     print(
-        f"Timestamp:            {timestamp}"
+        f"Timestamp:              {timestamp}"
     )
 
     print(
-        f"BTC price:            {price:.2f}"
+        f"BTC price:              {price:.2f}"
     )
 
     print(
-        f"Prediction:           {prediction}"
+        f"Prediction:             {prediction}"
     )
 
     print(
-        f"Confidence:           {confidence:.4f}"
+        f"Confidence:             {confidence:.4f}"
     )
 
     print(
-        f"Probability DOWN:     {probability_down:.4f}"
+        f"Probability DOWN:       {probability_down:.4f}"
     )
 
     print(
-        f"Probability NEUTRAL:  {probability_neutral:.4f}"
+        f"Probability NEUTRAL:    {probability_neutral:.4f}"
     )
 
     print(
-        f"Probability UP:       {probability_up:.4f}"
+        f"Probability UP:         {probability_up:.4f}"
     )
 
     print(
-        f"Signal:               {signal}"
+        f"Model signal:           {model_signal}"
     )
 
-    print("=" * 60)
+    print(
+        f"Final signal:           {final_signal}"
+    )
 
-    log_row = {
+    print("\n" + "-" * 70)
+    print("RISK MANAGEMENT")
+    print("-" * 70)
+
+    print(
+        f"Account balance:        ${risk.balance:.2f}"
+    )
+
+    print(
+        f"Risk status:            {risk_status}"
+    )
+
+    print(
+        f"Reason:                 {risk.reason}"
+    )
+
+    if final_signal in {"BUY", "SELL"}:
+
+        print(
+            f"Position notional:      "
+            f"${risk.position_notional:.2f}"
+        )
+
+        print(
+            f"BTC quantity:           "
+            f"{risk.quantity:.8f}"
+        )
+
+        print(
+            f"Maximum risk amount:    "
+            f"${risk.risk_amount:.2f}"
+        )
+
+        print(
+            f"Stop loss:              "
+            f"${risk.stop_loss_price:.2f}"
+        )
+
+        print(
+            f"Take profit:            "
+            f"${risk.take_profit_price:.2f}"
+        )
+
+    print("=" * 70)
+
+    row = {
         "timestamp": timestamp,
         "price": price,
+
         "prediction": prediction,
         "confidence": confidence,
+
         "probability_down":
             probability_down,
+
         "probability_neutral":
             probability_neutral,
+
         "probability_up":
             probability_up,
-        "signal": signal,
+
+        "signal": final_signal,
+
         "model_name":
             bundle["model_name"],
-        "status": "OPEN",
+
+        "status": status,
+
+        "risk_status":
+            risk_status,
+
+        "risk_reason":
+            risk.reason,
+
+        "account_balance_before":
+            risk.balance,
+
+        "risk_amount":
+            risk.risk_amount
+            if final_signal
+            in {"BUY", "SELL"}
+            else pd.NA,
+
+        "position_notional":
+            risk.position_notional
+            if final_signal
+            in {"BUY", "SELL"}
+            else pd.NA,
+
+        "quantity":
+            risk.quantity
+            if final_signal
+            in {"BUY", "SELL"}
+            else pd.NA,
+
+        "stop_loss_price":
+            risk.stop_loss_price
+            if final_signal
+            in {"BUY", "SELL"}
+            else pd.NA,
+
+        "take_profit_price":
+            risk.take_profit_price
+            if final_signal
+            in {"BUY", "SELL"}
+            else pd.NA,
+
+        "entry_price":
+            price
+            if final_signal
+            in {"BUY", "SELL"}
+            else pd.NA,
     }
 
-    save_signal(log_row)
+    save_log(
+        log,
+        row,
+    )
 
     print(
-        f"\nPaper signal saved to:\n{PAPER_LOG}"
+        f"\nPaper signal saved to:\n"
+        f"{PAPER_LOG}"
     )
 
 

@@ -2,6 +2,8 @@ from pathlib import Path
 
 import pandas as pd
 
+from risk_manager import STARTING_BALANCE
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
@@ -19,50 +21,53 @@ BTC_FILE = (
     / "btcusdt_1h.csv"
 )
 
+
+# Keep this consistent with our historical comparison.
 TRANSACTION_COST_PCT = 0.05
 
 
-def load_paper_log():
+def load_log():
     if not PAPER_LOG.exists():
         raise FileNotFoundError(
             f"Paper log not found:\n{PAPER_LOG}"
         )
 
-    df = pd.read_csv(PAPER_LOG)
+    log = pd.read_csv(
+        PAPER_LOG
+    )
 
-    if df.empty:
-        raise ValueError(
-            "Paper trade log is empty."
-        )
-
-    df["timestamp"] = pd.to_datetime(
-        df["timestamp"],
+    log["timestamp"] = pd.to_datetime(
+        log["timestamp"],
         utc=True,
     )
 
-    return df
+    return log
 
 
 def load_btc():
-    if not BTC_FILE.exists():
-        raise FileNotFoundError(
-            f"BTC file not found:\n{BTC_FILE}"
-        )
-
-    btc = pd.read_csv(BTC_FILE)
+    btc = pd.read_csv(
+        BTC_FILE
+    )
 
     btc["open_time"] = pd.to_datetime(
         btc["open_time"],
         utc=True,
     )
 
-    btc["close"] = pd.to_numeric(
-        btc["close"],
-        errors="coerce",
-    )
+    for column in [
+        "open",
+        "high",
+        "low",
+        "close",
+    ]:
+        btc[column] = pd.to_numeric(
+            btc[column],
+            errors="coerce",
+        )
 
-    btc = (
-        btc.sort_values("open_time")
+    return (
+        btc
+        .sort_values("open_time")
         .drop_duplicates(
             subset=["open_time"],
             keep="last",
@@ -70,13 +75,12 @@ def load_btc():
         .reset_index(drop=True)
     )
 
-    return btc
-
 
 def main():
+
     print("Loading paper trades...")
 
-    log = load_paper_log()
+    log = load_log()
 
     print(
         f"Paper log rows: {len(log)}"
@@ -91,30 +95,43 @@ def main():
         f"{btc['open_time'].iloc[-1]}"
     )
 
-    required_columns = {
-        "entry_price": None,
-        "exit_price": None,
-        "gross_return_pct": None,
-        "fee_pct": None,
-        "net_return_pct": None,
-        "result": None,
-        "status": None,
-        "cumulative_net_return_pct": None,
-    }
+    required = [
+        "entry_price",
+        "exit_price",
+        "exit_reason",
+        "gross_return_pct",
+        "fee_pct",
+        "net_return_pct",
+        "account_pnl",
+        "account_balance_after",
+        "result",
+        "status",
+        "cumulative_net_return_pct",
+    ]
 
-    for column, default_value in required_columns.items():
+    for column in required:
         if column not in log.columns:
-            log[column] = default_value
+            log[column] = pd.NA
 
-    closed_count = 0
+    balance = STARTING_BALANCE
+
+    existing_pnl = pd.to_numeric(
+        log["account_pnl"],
+        errors="coerce",
+    ).fillna(0)
+
+    balance += existing_pnl.sum()
+
+    newly_closed = 0
 
     for index, row in log.iterrows():
+
         signal = row["signal"]
 
-        if signal not in [
+        if signal not in {
             "BUY",
             "SELL",
-        ]:
+        }:
             log.at[
                 index,
                 "status",
@@ -122,25 +139,25 @@ def main():
 
             continue
 
-        if (
-            pd.notna(row.get("status"))
-            and row.get("status") == "CLOSED"
-        ):
+        if row["status"] == "CLOSED":
             continue
 
-        entry_timestamp = row["timestamp"]
+        entry_timestamp = row[
+            "timestamp"
+        ]
 
-        exit_timestamp = (
+        next_timestamp = (
             entry_timestamp
             + pd.Timedelta(hours=1)
         )
 
-        exit_match = btc[
+        candle_match = btc[
             btc["open_time"]
-            == exit_timestamp
+            == next_timestamp
         ]
 
-        if exit_match.empty:
+        if candle_match.empty:
+
             log.at[
                 index,
                 "status",
@@ -148,15 +165,87 @@ def main():
 
             continue
 
+        candle = candle_match.iloc[0]
+
         entry_price = float(
-            row["price"]
+            row["entry_price"]
+            if pd.notna(
+                row["entry_price"]
+            )
+            else row["price"]
         )
 
-        exit_price = float(
-            exit_match.iloc[0]["close"]
+        stop_price = float(
+            row["stop_loss_price"]
         )
+
+        target_price = float(
+            row["take_profit_price"]
+        )
+
+        high = float(
+            candle["high"]
+        )
+
+        low = float(
+            candle["low"]
+        )
+
+        close = float(
+            candle["close"]
+        )
+
+        # ----------------------------------------------------
+        # Determine whether stop or target was reached.
+        #
+        # If both are touched in the same 1h candle,
+        # intrabar ordering is unknown.
+        #
+        # Conservative assumption:
+        # STOP LOSS happened first.
+        # ----------------------------------------------------
 
         if signal == "BUY":
+
+            stop_hit = (
+                low <= stop_price
+            )
+
+            target_hit = (
+                high >= target_price
+            )
+
+        else:
+
+            stop_hit = (
+                high >= stop_price
+            )
+
+            target_hit = (
+                low <= target_price
+            )
+
+        if stop_hit:
+
+            exit_price = stop_price
+            exit_reason = "STOP_LOSS"
+
+        elif target_hit:
+
+            exit_price = target_price
+            exit_reason = "TAKE_PROFIT"
+
+        else:
+
+            exit_price = close
+            exit_reason = "ONE_HOUR_EXIT"
+
+        # ----------------------------------------------------
+        # Return
+        # ----------------------------------------------------
+
+        if signal == "BUY":
+
             gross_return = (
                 exit_price
                 / entry_price
@@ -164,6 +253,7 @@ def main():
             )
 
         else:
+
             gross_return = (
                 entry_price
                 / exit_price
@@ -180,17 +270,20 @@ def main():
             - fee_decimal
         )
 
-        gross_return_pct = (
-            gross_return * 100
+        position_notional = float(
+            row["position_notional"]
         )
 
-        net_return_pct = (
-            net_return * 100
+        account_pnl = (
+            position_notional
+            * net_return
         )
+
+        balance += account_pnl
 
         result = (
             "WIN"
-            if net_return > 0
+            if account_pnl > 0
             else "LOSS"
         )
 
@@ -206,8 +299,15 @@ def main():
 
         log.at[
             index,
+            "exit_reason",
+        ] = exit_reason
+
+        log.at[
+            index,
             "gross_return_pct",
-        ] = gross_return_pct
+        ] = (
+            gross_return * 100
+        )
 
         log.at[
             index,
@@ -217,7 +317,19 @@ def main():
         log.at[
             index,
             "net_return_pct",
-        ] = net_return_pct
+        ] = (
+            net_return * 100
+        )
+
+        log.at[
+            index,
+            "account_pnl",
+        ] = account_pnl
+
+        log.at[
+            index,
+            "account_balance_after",
+        ] = balance
 
         log.at[
             index,
@@ -229,84 +341,81 @@ def main():
             "status",
         ] = "CLOSED"
 
-        closed_count += 1
+        newly_closed += 1
 
     # --------------------------------------------------------
-    # Calculate cumulative net return for CLOSED trades only.
+    # Recalculate cumulative returns in chronological order.
     # --------------------------------------------------------
 
-    running_total = 0.0
+    cumulative = 0.0
 
     for index, row in log.iterrows():
+
         if (
             row["status"] == "CLOSED"
             and pd.notna(
                 row["net_return_pct"]
             )
         ):
-            running_total += float(
+
+            cumulative += float(
                 row["net_return_pct"]
             )
 
         log.at[
             index,
             "cumulative_net_return_pct",
-        ] = running_total
+        ] = cumulative
 
     log.to_csv(
         PAPER_LOG,
         index=False,
     )
 
-    closed_trades = log[
+    closed = log[
         log["status"] == "CLOSED"
-    ]
+    ].copy()
 
     wins = (
-        closed_trades["result"]
-        == "WIN"
+        closed["result"] == "WIN"
     ).sum()
 
     losses = (
-        closed_trades["result"]
-        == "LOSS"
+        closed["result"] == "LOSS"
     ).sum()
 
-    total_closed = len(
-        closed_trades
+    total = len(
+        closed
     )
 
     win_rate = (
-        wins
-        / total_closed
-        * 100
-        if total_closed > 0
-        else 0
+        wins / total * 100
+        if total
+        else 0.0
     )
 
-    total_net_return = (
-        pd.to_numeric(
-            closed_trades[
-                "net_return_pct"
-            ],
-            errors="coerce",
-        )
-        .fillna(0)
-        .sum()
+    total_account_pnl = pd.to_numeric(
+        closed["account_pnl"],
+        errors="coerce",
+    ).fillna(0).sum()
+
+    ending_balance = (
+        STARTING_BALANCE
+        + total_account_pnl
     )
 
-    print("\n" + "=" * 70)
+    print("\n" + "=" * 72)
     print("PAPER TRADE SETTLEMENT")
-    print("=" * 70)
+    print("=" * 72)
 
     print(
         f"Trades settled this run: "
-        f"{closed_count}"
+        f"{newly_closed}"
     )
 
     print(
         f"Total closed trades:     "
-        f"{total_closed}"
+        f"{total}"
     )
 
     print(
@@ -325,11 +434,16 @@ def main():
     )
 
     print(
-        f"Total net return:        "
-        f"{total_net_return:.2f}%"
+        f"Account P&L:             "
+        f"${total_account_pnl:.2f}"
     )
 
-    print("=" * 70)
+    print(
+        f"Paper balance:           "
+        f"${ending_balance:.2f}"
+    )
+
+    print("=" * 72)
 
     print(
         f"\nUpdated paper log:\n"
