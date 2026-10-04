@@ -184,8 +184,7 @@ def main() -> None:
         ("TEST", test_df),
     ]:
         print(
-            f"
-{name}"
+            f"\n{name}"
         )
 
         print(
@@ -204,15 +203,12 @@ def main() -> None:
         )
 
     print(
-        f"
-Splits saved to:"
-        f"
-{OUTPUT_DIR}"
+        f"\nSplits saved to:"
+        f"\n{OUTPUT_DIR}"
     )
 
     print(
-        "
-IMPORTANT: do not use "
+        "\nIMPORTANT: do not use "
         "test.csv during tuning."
     )
 
