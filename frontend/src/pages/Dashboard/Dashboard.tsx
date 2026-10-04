@@ -37,7 +37,12 @@ import {
   getBTCCandles,
 } from '../../services/marketApi'
 
+import {
+  getAIIndicator,
+} from '../../services/indicatorApi'
+
 import type {
+  AIIndicatorPoint,
   ChartTimeframe,
   StrategyTimeframe,
   TimeframeStatus,
@@ -95,6 +100,12 @@ const Dashboard = () => {
     setCandles,
   ] =
     useState<BTCCandle[]>([])
+
+  const [
+    aiPoints,
+    setAIPoints,
+  ] =
+    useState<AIIndicatorPoint[]>([])
 
   const [
     strategyLoading,
@@ -263,6 +274,49 @@ const Dashboard = () => {
   }, [chartTimeframe])
 
 
+
+  useEffect(() => {
+    let active = true
+
+    const loadAIIndicator =
+      async () => {
+        try {
+          const points =
+            await getAIIndicator(
+              200,
+            )
+
+          if (!active) {
+            return
+          }
+
+          setAIPoints(
+            points,
+          )
+        } catch {
+          if (active) {
+            setAIPoints([])
+          }
+        }
+      }
+
+    loadAIIndicator()
+
+    const refresh =
+      window.setInterval(
+        loadAIIndicator,
+        10_000,
+      )
+
+    return () => {
+      active = false
+
+      window.clearInterval(
+        refresh,
+      )
+    }
+  }, [])
+
   const selectedStatus =
     timeframeStatus.find(
       (item) =>
@@ -386,6 +440,9 @@ const Dashboard = () => {
                   }
                   error={
                     chartError
+                  }
+                  aiPoints={
+                    aiPoints
                   }
                 />
               </div>
