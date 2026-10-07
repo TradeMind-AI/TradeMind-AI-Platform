@@ -31,6 +31,9 @@ import StrategyResearch
 import ManualPaperTrading
   from '../../components/dashboard/ManualPaperTrading'
 
+import MicroPaperMonitor
+  from '../../components/dashboard/MicroPaperMonitor'
+
 import {
   getDashboardData,
   getTimeframeStatus,
@@ -452,6 +455,11 @@ const Dashboard = () => {
 
               <div className="mt-6">
                 <ManualPaperTrading />
+              </div>
+
+
+              <div className="mt-6">
+                <MicroPaperMonitor />
               </div>
 
 
