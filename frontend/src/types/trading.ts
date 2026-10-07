@@ -119,3 +119,62 @@ export type ManualPaperAccount = {
   feeRatePct: number
   recentOrders: ManualPaperOrder[]
 }
+
+
+export type MicroPaperTrade = {
+  timestamp: string
+  event: string
+  side: string
+  entryPrice: number
+  exitPrice: number
+  notionalUsdt: number
+  netReturnPct: number
+  pnlUsdt: number
+  reason: string
+  modelConfidence: number
+}
+
+export type MicroPaperLatest = {
+  timestamp: string
+  price: number
+  prediction: number
+  confidence: number
+  probDown: number
+  probNeutral: number
+  probUp: number
+  learningSamples: number
+  decisionSource: string
+  tradeDirection: number
+  spotDepthImbalance: number
+  spotTradeFlowImbalance: number
+  spotVelocityBps: number
+  futuresDepthImbalance: number
+  futuresTradeFlowImbalance: number
+  futuresVelocityBps: number
+  fundingRate: number
+  openInterestChangePct: number
+}
+
+export type MicroPaperPosition = {
+  direction: number
+  entry_price: number
+  notional_usdt: number
+  opened_at: string
+  model_confidence: number
+  learning_samples: number
+  decision_source: string
+}
+
+export type MicroPaperStatus = {
+  running: boolean
+  message: string
+  equityUsdt: number
+  realizedPnlUsdt: number
+  closedTrades: number
+  wins: number
+  losses: number
+  winRatePct: number
+  position: MicroPaperPosition | null
+  latest: MicroPaperLatest | null
+  recentTrades: MicroPaperTrade[]
+}
