@@ -1150,8 +1150,8 @@ def main() -> None:
 
     print()
     print(
-        "Evaluating untouched validation "
-        "window..."
+        "Evaluating the shared chronological "
+        "validation window..."
     )
 
     val_target = (
@@ -1361,9 +1361,9 @@ def main() -> None:
 
     print()
     print(
-        "IMPORTANT: KNOWN_RECENT from "
-        "2026-07-01 onward is still not "
-        "evaluated here."
+        "IMPORTANT: 2026-07-01 onward is "
+        "still excluded from this script and "
+        "reserved for a later one-shot check."
     )
 
     print(
