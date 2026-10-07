@@ -57,9 +57,25 @@ FEATURE_LOG = (
     / "feature_snapshots.csv"
 )
 
+EVALUATION_LOG = (
+    OUTPUT_DIR
+    / "prequential_evaluation.csv"
+)
+
+EVALUATION_FILE = (
+    OUTPUT_DIR
+    / "evaluation_metrics.json"
+)
+
 LOOP_SECONDS = 5
 LABEL_HORIZON_SECONDS = 30
 LABEL_THRESHOLD = 0.0005
+
+# Use non-overlapping learning examples. The bot may
+# make a decision every 5s, but it only trains on one
+# independent 30s sample at a time.
+TRAIN_SAMPLE_INTERVAL_SECONDS = 30
+MODEL_VERSION = 2
 
 STARTING_EQUITY = 10000.0
 POSITION_FRACTION = 0.05
@@ -578,18 +594,35 @@ class OnlineModel:
         self.scaler = StandardScaler()
         self.model = SGDClassifier(
             loss="log_loss",
-            alpha=0.0005,
+            alpha=0.001,
+            penalty="l2",
+            average=True,
             random_state=42,
         )
         self.scaler_ready = False
         self.model_ready = False
         self.samples = 0
+        self.class_counts = {
+            -1: 0,
+            0: 0,
+            1: 0,
+        }
 
         if MODEL_FILE.exists():
             try:
                 saved = joblib.load(
                     MODEL_FILE
                 )
+                if int(
+                    saved.get(
+                        "model_version",
+                        1,
+                    )
+                ) != MODEL_VERSION:
+                    raise ValueError(
+                        "Old online model version"
+                    )
+
                 self.scaler = saved[
                     "scaler"
                 ]
@@ -614,6 +647,41 @@ class OnlineModel:
                         0,
                     )
                 )
+
+                saved_counts = saved.get(
+                    "class_counts",
+                    {},
+                )
+
+                self.class_counts = {
+                    -1: int(
+                        saved_counts.get(
+                            -1,
+                            saved_counts.get(
+                                "-1",
+                                0,
+                            ),
+                        )
+                    ),
+                    0: int(
+                        saved_counts.get(
+                            0,
+                            saved_counts.get(
+                                "0",
+                                0,
+                            ),
+                        )
+                    ),
+                    1: int(
+                        saved_counts.get(
+                            1,
+                            saved_counts.get(
+                                "1",
+                                0,
+                            ),
+                        )
+                    ),
+                }
             except Exception:
                 pass
 
@@ -638,6 +706,38 @@ class OnlineModel:
             )
         )
 
+        total_seen = max(
+            1,
+            sum(
+                self.class_counts.values()
+            ),
+        )
+
+        class_seen = max(
+            1,
+            self.class_counts.get(
+                int(label),
+                0,
+            ),
+        )
+
+        # Mild inverse-frequency weighting reduces
+        # UP/DOWN/NEUTRAL class bias without allowing
+        # rare classes to dominate the online learner.
+        sample_weight = float(
+            np.clip(
+                np.sqrt(
+                    total_seen
+                    / (
+                        3.0
+                        * class_seen
+                    )
+                ),
+                0.5,
+                3.0,
+            )
+        )
+
         if not self.model_ready:
             self.model.partial_fit(
                 transformed,
@@ -645,6 +745,9 @@ class OnlineModel:
                     [label]
                 ),
                 classes=CLASSES,
+                sample_weight=np.array(
+                    [sample_weight]
+                ),
             )
             self.model_ready = True
         else:
@@ -653,7 +756,14 @@ class OnlineModel:
                 np.array(
                     [label]
                 ),
+                sample_weight=np.array(
+                    [sample_weight]
+                ),
             )
+
+        self.class_counts[
+            int(label)
+        ] += 1
 
         self.samples += 1
         self.save()
@@ -726,6 +836,8 @@ class OnlineModel:
 
         joblib.dump(
             {
+                "model_version":
+                    MODEL_VERSION,
                 "scaler":
                     self.scaler,
                 "model":
@@ -736,6 +848,8 @@ class OnlineModel:
                     self.model_ready,
                 "samples":
                     self.samples,
+                "class_counts":
+                    self.class_counts,
                 "feature_names":
                     FEATURE_NAMES,
                 "label_horizon_seconds":
@@ -1148,6 +1262,274 @@ def maybe_open_position(
     )
 
 
+
+
+
+def load_evaluation() -> dict:
+    if EVALUATION_FILE.exists():
+        try:
+            return json.loads(
+                EVALUATION_FILE.read_text(
+                    encoding="utf-8"
+                )
+            )
+        except Exception:
+            pass
+
+    return {
+        "total": 0,
+        "correct": 0,
+        "confusion": {
+            "-1": {
+                "-1": 0,
+                "0": 0,
+                "1": 0,
+            },
+            "0": {
+                "-1": 0,
+                "0": 0,
+                "1": 0,
+            },
+            "1": {
+                "-1": 0,
+                "0": 0,
+                "1": 0,
+            },
+        },
+        "high_conf_total": 0,
+        "high_conf_correct": 0,
+        "prediction_counts": {
+            "-1": 0,
+            "0": 0,
+            "1": 0,
+        },
+        "actual_counts": {
+            "-1": 0,
+            "0": 0,
+            "1": 0,
+        },
+    }
+
+
+def save_evaluation(
+    evaluation: dict,
+) -> None:
+    EVALUATION_FILE.write_text(
+        json.dumps(
+            evaluation,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+
+def evaluation_summary(
+    evaluation: dict,
+) -> tuple[
+    float,
+    float,
+    float,
+]:
+    total = int(
+        evaluation.get(
+            "total",
+            0,
+        )
+    )
+
+    accuracy = (
+        float(
+            evaluation.get(
+                "correct",
+                0,
+            )
+        )
+        / total
+        if total > 0
+        else 0.0
+    )
+
+    recalls = []
+
+    confusion = evaluation[
+        "confusion"
+    ]
+
+    for label in [
+        "-1",
+        "0",
+        "1",
+    ]:
+        row_total = sum(
+            int(value)
+            for value in confusion[
+                label
+            ].values()
+        )
+
+        if row_total > 0:
+            recalls.append(
+                int(
+                    confusion[
+                        label
+                    ][label]
+                )
+                / row_total
+            )
+
+    balanced_accuracy = (
+        float(
+            np.mean(
+                recalls
+            )
+        )
+        if recalls
+        else 0.0
+    )
+
+    high_total = int(
+        evaluation.get(
+            "high_conf_total",
+            0,
+        )
+    )
+
+    high_accuracy = (
+        float(
+            evaluation.get(
+                "high_conf_correct",
+                0,
+            )
+        )
+        / high_total
+        if high_total > 0
+        else 0.0
+    )
+
+    return (
+        accuracy,
+        balanced_accuracy,
+        high_accuracy,
+    )
+
+
+def record_prequential_result(
+    evaluation: dict,
+    sample: dict,
+    label: int,
+    future_return: float,
+) -> None:
+    prediction = int(
+        sample[
+            "prediction"
+        ]
+    )
+
+    confidence = float(
+        sample[
+            "confidence"
+        ]
+    )
+
+    actual_key = str(
+        label
+    )
+
+    prediction_key = str(
+        prediction
+    )
+
+    evaluation["total"] = int(
+        evaluation.get(
+            "total",
+            0,
+        )
+    ) + 1
+
+    if prediction == label:
+        evaluation["correct"] = int(
+            evaluation.get(
+                "correct",
+                0,
+            )
+        ) + 1
+
+    evaluation[
+        "confusion"
+    ][actual_key][
+        prediction_key
+    ] += 1
+
+    evaluation[
+        "prediction_counts"
+    ][prediction_key] += 1
+
+    evaluation[
+        "actual_counts"
+    ][actual_key] += 1
+
+    if confidence >= 0.80:
+        evaluation[
+            "high_conf_total"
+        ] += 1
+
+        if prediction == label:
+            evaluation[
+                "high_conf_correct"
+            ] += 1
+
+    append_csv(
+        EVALUATION_LOG,
+        {
+            "timestamp":
+                utc_now_iso(),
+            "sample_time":
+                sample[
+                    "sample_time"
+                ],
+            "prediction":
+                prediction,
+            "confidence":
+                confidence,
+            "actual_label":
+                label,
+            "correct":
+                int(
+                    prediction
+                    == label
+                ),
+            "future_return_pct":
+                future_return
+                * 100.0,
+            "prob_down":
+                sample[
+                    "probabilities"
+                ].get(
+                    -1,
+                    0.0,
+                ),
+            "prob_neutral":
+                sample[
+                    "probabilities"
+                ].get(
+                    0,
+                    0.0,
+                ),
+            "prob_up":
+                sample[
+                    "probabilities"
+                ].get(
+                    1,
+                    0.0,
+                ),
+        },
+    )
+
+    save_evaluation(
+        evaluation
+    )
+
+
 def label_from_return(
     future_return: float,
 ) -> int:
@@ -1174,10 +1556,13 @@ def main() -> None:
 
     model = OnlineModel()
     account = load_account()
+    evaluation = load_evaluation()
 
     pending: deque[dict] = (
         deque()
     )
+
+    last_training_sample_at = 0.0
 
     print(
         "TRADEMIND MICRO PAPER LEARNER"
@@ -1199,6 +1584,12 @@ def main() -> None:
         "Research entry confidence: "
         f"{MODEL_ENTRY_CONFIDENCE:.2f}; "
         "production target remains >= 0.80."
+    )
+    print(
+        "Anti-overfit mode: prequential "
+        "test-before-train evaluation + "
+        f"{TRAIN_SAMPLE_INTERVAL_SECONDS}s "
+        "non-overlapping training samples."
     )
     print(
         "Press Ctrl+C to stop."
@@ -1250,6 +1641,17 @@ def main() -> None:
                     )
                 )
 
+                # Evaluate the prediction that was made
+                # BEFORE this future outcome was known.
+                # Only after scoring it do we let the
+                # model learn from the sample.
+                record_prequential_result(
+                    evaluation,
+                    sample,
+                    label,
+                    future_return,
+                )
+
                 model.update(
                     sample[
                         "features"
@@ -1282,19 +1684,6 @@ def main() -> None:
                     },
                 )
 
-            pending.append(
-                {
-                    "created_at":
-                        now,
-                    "sample_time":
-                        utc_now_iso(),
-                    "price":
-                        price,
-                    "features":
-                        features.copy(),
-                }
-            )
-
             (
                 prediction,
                 confidence,
@@ -1302,6 +1691,36 @@ def main() -> None:
             ) = model.predict(
                 features
             )
+
+            if (
+                now
+                - last_training_sample_at
+                >= TRAIN_SAMPLE_INTERVAL_SECONDS
+            ):
+                pending.append(
+                    {
+                        "created_at":
+                            now,
+                        "sample_time":
+                            utc_now_iso(),
+                        "price":
+                            price,
+                        "features":
+                            features.copy(),
+                        "prediction":
+                            prediction,
+                        "confidence":
+                            confidence,
+                        "probabilities":
+                            dict(
+                                probabilities
+                            ),
+                    }
+                )
+
+                last_training_sample_at = (
+                    now
+                )
 
             heuristic = (
                 heuristic_direction(
@@ -1445,11 +1864,22 @@ def main() -> None:
                 )
             )
 
+            (
+                model_accuracy,
+                balanced_accuracy,
+                high_conf_accuracy,
+            ) = evaluation_summary(
+                evaluation
+            )
+
             print(
                 f"price={price:.2f} "
                 f"samples={model.samples} "
                 f"pred={prediction:+d} "
                 f"conf={confidence:.3f} "
+                f"preq_acc={model_accuracy * 100:.1f}% "
+                f"bal_acc={balanced_accuracy * 100:.1f}% "
+                f"80conf_acc={high_conf_accuracy * 100:.1f}% "
                 f"position={position_text} "
                 f"trades={account['closed_trades']} "
                 f"win={win_rate:.1f}% "
