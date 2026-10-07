@@ -25,6 +25,29 @@ MANUAL_PAPER_FILE = (
     / "manual_paper_account.json"
 )
 
+
+MICRO_PAPER_DIR = (
+    PROJECT_ROOT
+    / "data"
+    / "processed"
+    / "micro_paper_learning"
+)
+
+MICRO_PAPER_ACCOUNT_FILE = (
+    MICRO_PAPER_DIR
+    / "account.json"
+)
+
+MICRO_PAPER_FEATURE_FILE = (
+    MICRO_PAPER_DIR
+    / "feature_snapshots.csv"
+)
+
+MICRO_PAPER_TRADE_FILE = (
+    MICRO_PAPER_DIR
+    / "trades.csv"
+)
+
 MANUAL_PAPER_STARTING_USDT = 10000.0
 MANUAL_PAPER_FEE_RATE = 0.0005
 MANUAL_PAPER_LOCK = threading.Lock()
@@ -1150,6 +1173,328 @@ def resample_chart_data(
     return result
 
 
+
+
+
+
+
+@app.get("/api/paper/micro/status")
+def get_micro_paper_status():
+    if not MICRO_PAPER_ACCOUNT_FILE.exists():
+        return {
+            "running": False,
+            "message": (
+                "Micro paper learner has not "
+                "written an account yet."
+            ),
+            "equityUsdt": 10000.0,
+            "realizedPnlUsdt": 0.0,
+            "closedTrades": 0,
+            "wins": 0,
+            "losses": 0,
+            "winRatePct": 0.0,
+            "position": None,
+            "latest": None,
+            "recentTrades": [],
+        }
+
+    try:
+        account = json.loads(
+            MICRO_PAPER_ACCOUNT_FILE.read_text(
+                encoding="utf-8",
+            )
+        )
+    except (
+        json.JSONDecodeError,
+        OSError,
+    ) as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "Micro paper account file "
+                "could not be read."
+            ),
+        ) from exc
+
+    latest = None
+
+    if MICRO_PAPER_FEATURE_FILE.exists():
+        try:
+            snapshots = pd.read_csv(
+                MICRO_PAPER_FEATURE_FILE
+            )
+
+            if not snapshots.empty:
+                row = snapshots.iloc[-1]
+
+                latest = {
+                    "timestamp":
+                        safe_string(
+                            row.get(
+                                "timestamp"
+                            )
+                        ),
+                    "price":
+                        safe_float(
+                            row.get(
+                                "price"
+                            )
+                        ),
+                    "prediction":
+                        int(
+                            safe_float(
+                                row.get(
+                                    "prediction"
+                                )
+                            )
+                        ),
+                    "confidence":
+                        safe_float(
+                            row.get(
+                                "confidence"
+                            )
+                        ),
+                    "probDown":
+                        safe_float(
+                            row.get(
+                                "prob_down"
+                            )
+                        ),
+                    "probNeutral":
+                        safe_float(
+                            row.get(
+                                "prob_neutral"
+                            )
+                        ),
+                    "probUp":
+                        safe_float(
+                            row.get(
+                                "prob_up"
+                            )
+                        ),
+                    "learningSamples":
+                        int(
+                            safe_float(
+                                row.get(
+                                    "learning_samples"
+                                )
+                            )
+                        ),
+                    "decisionSource":
+                        safe_string(
+                            row.get(
+                                "decision_source"
+                            )
+                        ),
+                    "tradeDirection":
+                        int(
+                            safe_float(
+                                row.get(
+                                    "trade_direction"
+                                )
+                            )
+                        ),
+                    "spotDepthImbalance":
+                        safe_float(
+                            row.get(
+                                "spot_depth20_imbalance"
+                            )
+                        ),
+                    "spotTradeFlowImbalance":
+                        safe_float(
+                            row.get(
+                                "spot_trade_flow_imbalance"
+                            )
+                        ),
+                    "spotVelocityBps":
+                        safe_float(
+                            row.get(
+                                "spot_price_velocity_bps"
+                            )
+                        ),
+                    "futuresDepthImbalance":
+                        safe_float(
+                            row.get(
+                                "futures_depth20_imbalance"
+                            )
+                        ),
+                    "futuresTradeFlowImbalance":
+                        safe_float(
+                            row.get(
+                                "futures_trade_flow_imbalance"
+                            )
+                        ),
+                    "futuresVelocityBps":
+                        safe_float(
+                            row.get(
+                                "futures_price_velocity_bps"
+                            )
+                        ),
+                    "fundingRate":
+                        safe_float(
+                            row.get(
+                                "funding_rate"
+                            )
+                        ),
+                    "openInterestChangePct":
+                        safe_float(
+                            row.get(
+                                "open_interest_change_pct"
+                            )
+                        ),
+                }
+        except Exception:
+            latest = None
+
+    recent_trades = []
+
+    if MICRO_PAPER_TRADE_FILE.exists():
+        try:
+            trades = pd.read_csv(
+                MICRO_PAPER_TRADE_FILE
+            )
+
+            if not trades.empty:
+                for _, row in (
+                    trades
+                    .tail(20)
+                    .iloc[::-1]
+                    .iterrows()
+                ):
+                    recent_trades.append(
+                        {
+                            "timestamp":
+                                safe_string(
+                                    row.get(
+                                        "timestamp"
+                                    )
+                                ),
+                            "event":
+                                safe_string(
+                                    row.get(
+                                        "event"
+                                    )
+                                ),
+                            "side":
+                                safe_string(
+                                    row.get(
+                                        "side"
+                                    )
+                                ),
+                            "entryPrice":
+                                safe_float(
+                                    row.get(
+                                        "entry_price"
+                                    )
+                                ),
+                            "exitPrice":
+                                safe_float(
+                                    row.get(
+                                        "exit_price"
+                                    )
+                                ),
+                            "notionalUsdt":
+                                safe_float(
+                                    row.get(
+                                        "notional_usdt"
+                                    )
+                                ),
+                            "netReturnPct":
+                                safe_float(
+                                    row.get(
+                                        "net_return_pct"
+                                    )
+                                ),
+                            "pnlUsdt":
+                                safe_float(
+                                    row.get(
+                                        "pnl_usdt"
+                                    )
+                                ),
+                            "reason":
+                                safe_string(
+                                    row.get(
+                                        "reason"
+                                    )
+                                ),
+                            "modelConfidence":
+                                safe_float(
+                                    row.get(
+                                        "model_confidence"
+                                    )
+                                ),
+                        }
+                    )
+        except Exception:
+            recent_trades = []
+
+    closed_trades = int(
+        account.get(
+            "closed_trades",
+            0,
+        )
+    )
+
+    wins = int(
+        account.get(
+            "wins",
+            0,
+        )
+    )
+
+    losses = int(
+        account.get(
+            "losses",
+            0,
+        )
+    )
+
+    win_rate = (
+        wins / closed_trades * 100.0
+        if closed_trades > 0
+        else 0.0
+    )
+
+    position = account.get(
+        "position"
+    )
+
+    return {
+        "running": latest is not None,
+        "message": (
+            "Micro paper learner data available."
+            if latest is not None
+            else "Waiting for learner snapshots."
+        ),
+        "equityUsdt":
+            safe_float(
+                account.get(
+                    "equity_usdt",
+                    10000.0,
+                )
+            ),
+        "realizedPnlUsdt":
+            safe_float(
+                account.get(
+                    "realized_pnl_usdt",
+                    0.0,
+                )
+            ),
+        "closedTrades":
+            closed_trades,
+        "wins":
+            wins,
+        "losses":
+            losses,
+        "winRatePct":
+            win_rate,
+        "position":
+            position,
+        "latest":
+            latest,
+        "recentTrades":
+            recent_trades,
+    }
 
 
 @app.get("/api/paper/manual/account")
