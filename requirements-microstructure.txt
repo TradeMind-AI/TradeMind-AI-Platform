@@ -1,2 +1,5 @@
 websockets>=15.0
 requests>=2.31
+numpy>=2.0
+scikit-learn>=1.5
+joblib>=1.4
