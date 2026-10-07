@@ -28,6 +28,9 @@ import SystemStatus
 import StrategyResearch
   from '../../components/dashboard/StrategyResearch'
 
+import ManualPaperTrading
+  from '../../components/dashboard/ManualPaperTrading'
+
 import {
   getDashboardData,
   getTimeframeStatus,
@@ -445,6 +448,10 @@ const Dashboard = () => {
                     aiPoints
                   }
                 />
+              </div>
+
+              <div className="mt-6">
+                <ManualPaperTrading />
               </div>
 
 
