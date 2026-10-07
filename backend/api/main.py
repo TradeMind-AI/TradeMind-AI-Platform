@@ -2,8 +2,12 @@ from pathlib import Path
 
 import joblib
 import pandas as pd
+import json
+import threading
+
 import requests
 from fastapi import FastAPI, HTTPException, Query
+from pydantic import BaseModel, Field
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.services.trading.timeframe_config import (
@@ -13,6 +17,27 @@ from backend.services.trading.timeframe_config import (
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+MANUAL_PAPER_FILE = (
+    PROJECT_ROOT
+    / "data"
+    / "processed"
+    / "manual_paper_account.json"
+)
+
+MANUAL_PAPER_STARTING_USDT = 10000.0
+MANUAL_PAPER_FEE_RATE = 0.0005
+MANUAL_PAPER_LOCK = threading.Lock()
+
+
+class ManualPaperOrderRequest(BaseModel):
+    side: str
+    amount_usdt: float = Field(
+        gt=0,
+        le=1_000_000,
+    )
+
+
 
 
 app = FastAPI(
@@ -47,6 +72,141 @@ def safe_string(value, default=""):
 
 def display_timeframe(timeframe: str) -> str:
     return "1H" if timeframe == "1h" else timeframe
+
+
+def manual_paper_default_state() -> dict:
+    return {
+        "cash_usdt": MANUAL_PAPER_STARTING_USDT,
+        "btc_quantity": 0.0,
+        "average_entry_price": 0.0,
+        "realized_pnl_usdt": 0.0,
+        "orders": [],
+    }
+
+
+def load_manual_paper_state() -> dict:
+    if not MANUAL_PAPER_FILE.exists():
+        return manual_paper_default_state()
+
+    try:
+        return json.loads(
+            MANUAL_PAPER_FILE.read_text(
+                encoding="utf-8",
+            )
+        )
+    except (
+        json.JSONDecodeError,
+        OSError,
+    ):
+        return manual_paper_default_state()
+
+
+def save_manual_paper_state(
+    state: dict,
+) -> None:
+    MANUAL_PAPER_FILE.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    MANUAL_PAPER_FILE.write_text(
+        json.dumps(
+            state,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+
+def fetch_live_btc_price() -> float:
+    try:
+        response = requests.get(
+            BINANCE_SPOT_BASE_URL
+            + BINANCE_KLINES_ENDPOINT,
+            params={
+                "symbol": "BTCUSDT",
+                "interval": "1m",
+                "limit": 1,
+            },
+            timeout=10,
+        )
+        response.raise_for_status()
+        rows = response.json()
+    except requests.RequestException as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                "Could not retrieve live BTC "
+                "price for paper order."
+            ),
+        ) from exc
+
+    if not rows:
+        raise HTTPException(
+            status_code=502,
+            detail="No BTC price returned.",
+        )
+
+    return float(rows[-1][4])
+
+
+def manual_paper_snapshot(
+    state: dict,
+    price: float,
+) -> dict:
+    btc_quantity = float(
+        state.get(
+            "btc_quantity",
+            0.0,
+        )
+    )
+    cash = float(
+        state.get(
+            "cash_usdt",
+            MANUAL_PAPER_STARTING_USDT,
+        )
+    )
+    avg_entry = float(
+        state.get(
+            "average_entry_price",
+            0.0,
+        )
+    )
+    btc_value = btc_quantity * price
+    unrealized = (
+        (price - avg_entry)
+        * btc_quantity
+        if btc_quantity > 0
+        else 0.0
+    )
+
+    return {
+        "cashUsdt": cash,
+        "btcQuantity": btc_quantity,
+        "averageEntryPrice": avg_entry,
+        "btcMarketValueUsdt": btc_value,
+        "equityUsdt": cash + btc_value,
+        "realizedPnlUsdt": float(
+            state.get(
+                "realized_pnl_usdt",
+                0.0,
+            )
+        ),
+        "unrealizedPnlUsdt": unrealized,
+        "livePrice": price,
+        "feeRatePct": (
+            MANUAL_PAPER_FEE_RATE
+            * 100
+        ),
+        "recentOrders": list(
+            reversed(
+                state.get(
+                    "orders",
+                    [],
+                )[-20:]
+            )
+        ),
+    }
 
 
 def get_ready_state(timeframe: str) -> dict:
@@ -988,6 +1148,212 @@ def resample_chart_data(
     )
 
     return result
+
+
+
+
+@app.get("/api/paper/manual/account")
+def get_manual_paper_account():
+    with MANUAL_PAPER_LOCK:
+        state = load_manual_paper_state()
+        price = fetch_live_btc_price()
+        return manual_paper_snapshot(
+            state,
+            price,
+        )
+
+
+@app.post("/api/paper/manual/order")
+def place_manual_paper_order(
+    request: ManualPaperOrderRequest,
+):
+    side = request.side.strip().upper()
+
+    if side not in {
+        "BUY",
+        "SELL",
+    }:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Paper side must be BUY or SELL."
+            ),
+        )
+
+    with MANUAL_PAPER_LOCK:
+        state = load_manual_paper_state()
+        price = fetch_live_btc_price()
+        requested_usdt = float(
+            request.amount_usdt
+        )
+        timestamp = pd.Timestamp.now(
+            tz="UTC"
+        ).isoformat()
+
+        cash = float(
+            state.get(
+                "cash_usdt",
+                MANUAL_PAPER_STARTING_USDT,
+            )
+        )
+        btc_quantity = float(
+            state.get(
+                "btc_quantity",
+                0.0,
+            )
+        )
+        average_entry = float(
+            state.get(
+                "average_entry_price",
+                0.0,
+            )
+        )
+        fee_usdt = (
+            requested_usdt
+            * MANUAL_PAPER_FEE_RATE
+        )
+
+        if side == "BUY":
+            total_cost = (
+                requested_usdt
+                + fee_usdt
+            )
+
+            if total_cost > cash:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        "Not enough paper USDT for "
+                        "this BUY order including fee."
+                    ),
+                )
+
+            quantity = (
+                requested_usdt
+                / price
+            )
+            previous_cost_basis = (
+                btc_quantity
+                * average_entry
+            )
+            new_quantity = (
+                btc_quantity
+                + quantity
+            )
+            new_average_entry = (
+                (
+                    previous_cost_basis
+                    + requested_usdt
+                )
+                / new_quantity
+            )
+
+            state["cash_usdt"] = (
+                cash - total_cost
+            )
+            state["btc_quantity"] = (
+                new_quantity
+            )
+            state["average_entry_price"] = (
+                new_average_entry
+            )
+            realized_pnl = 0.0
+        else:
+            available_value = (
+                btc_quantity
+                * price
+            )
+
+            if requested_usdt > (
+                available_value
+                + 1e-9
+            ):
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        "Not enough paper BTC for "
+                        "this SELL order."
+                    ),
+                )
+
+            quantity = (
+                requested_usdt
+                / price
+            )
+            realized_pnl = (
+                (price - average_entry)
+                * quantity
+                - fee_usdt
+            )
+            remaining_quantity = max(
+                0.0,
+                btc_quantity
+                - quantity,
+            )
+
+            state["cash_usdt"] = (
+                cash
+                + requested_usdt
+                - fee_usdt
+            )
+            state["btc_quantity"] = (
+                remaining_quantity
+            )
+            state["realized_pnl_usdt"] = (
+                float(
+                    state.get(
+                        "realized_pnl_usdt",
+                        0.0,
+                    )
+                )
+                + realized_pnl
+            )
+
+            if remaining_quantity <= 1e-12:
+                state["btc_quantity"] = 0.0
+                state["average_entry_price"] = 0.0
+
+        order = {
+            "timestamp": timestamp,
+            "side": side,
+            "price": price,
+            "amountUsdt": requested_usdt,
+            "btcQuantity": quantity,
+            "feeUsdt": fee_usdt,
+            "realizedPnlUsdt": realized_pnl,
+        }
+
+        state.setdefault(
+            "orders",
+            [],
+        ).append(order)
+
+        state["orders"] = state[
+            "orders"
+        ][-500:]
+
+        save_manual_paper_state(
+            state
+        )
+
+        return manual_paper_snapshot(
+            state,
+            price,
+        )
+
+
+@app.post("/api/paper/manual/reset")
+def reset_manual_paper_account():
+    with MANUAL_PAPER_LOCK:
+        state = manual_paper_default_state()
+        save_manual_paper_state(
+            state
+        )
+        price = fetch_live_btc_price()
+        return manual_paper_snapshot(
+            state,
+            price,
+        )
 
 
 @app.get("/api/market/btc")
