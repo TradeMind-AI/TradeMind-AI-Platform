@@ -95,3 +95,27 @@ export type AIIndicatorPoint = {
   prediction: Prediction
   signal: TradingSignal
 }
+
+
+export type ManualPaperOrder = {
+  timestamp: string
+  side: 'BUY' | 'SELL'
+  price: number
+  amountUsdt: number
+  btcQuantity: number
+  feeUsdt: number
+  realizedPnlUsdt: number
+}
+
+export type ManualPaperAccount = {
+  cashUsdt: number
+  btcQuantity: number
+  averageEntryPrice: number
+  btcMarketValueUsdt: number
+  equityUsdt: number
+  realizedPnlUsdt: number
+  unrealizedPnlUsdt: number
+  livePrice: number
+  feeRatePct: number
+  recentOrders: ManualPaperOrder[]
+}
