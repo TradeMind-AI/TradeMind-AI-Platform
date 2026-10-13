@@ -1739,7 +1739,74 @@ const BTCChart = ({
           [
             'ATR 14',
             computedIndicators.metrics.atr14 !== null
-              ? '
+              ? '$' + computedIndicators.metrics.atr14.toFixed(2)
+              : '—',
+          ],
+          [
+            'VWAP',
+            computedIndicators.metrics.vwap !== null
+              ? '$' + computedIndicators.metrics.vwap.toLocaleString(
+                  'en-US',
+                  {
+                    maximumFractionDigits: 2,
+                  },
+                )
+              : '—',
+          ],
+          [
+            'Stoch %K',
+            computedIndicators.metrics.stochastic !== null
+              ? computedIndicators.metrics.stochastic.toFixed(1)
+              : '—',
+          ],
+          [
+            'Rel Volume',
+            computedIndicators.metrics.volumeRatio !== null
+              ? computedIndicators.metrics.volumeRatio.toFixed(2) + 'x'
+              : '—',
+          ],
+        ].map(
+          ([
+            label,
+            value,
+          ]) => (
+            <div
+              key={label}
+              className="rounded-lg border border-[#d4af37]/10 bg-black/20 px-3 py-2.5"
+            >
+              <p className="text-[10px] uppercase tracking-wider text-white/25">
+                {label}
+              </p>
+
+              <p className="mt-1 text-sm font-medium text-[#e7d8ad]">
+                {value}
+              </p>
+            </div>
+          ),
+        )}
+      </div>
+
+      {strategyStatus && (
+        <div className="mt-3 flex flex-wrap items-center gap-3 rounded-xl border border-[#d4af37]/15 bg-[#d4af37]/[0.035] px-4 py-3 text-xs">
+          <span className="uppercase tracking-[0.16em] text-[#9f8440]">
+            Strategy
+          </span>
+
+          <span className="font-semibold text-[#f0cf68]">
+            {strategyStatus.signal}
+          </span>
+
+          <span className="text-white/35">
+            {strategyStatus.note}
+          </span>
+
+          <span className="ml-auto text-white/20">
+            Research overlay · not an order
+          </span>
+        </div>
+      )}
+
+      <div className="mt-4 flex flex-wrap gap-2 text-[11px]">
         {indicators.ema20 && (
           <span className="rounded-full border border-[#d89c45]/20 bg-[#d89c45]/[0.05] px-2.5 py-1 text-[#d9b36d]">
             EMA 20
