@@ -168,10 +168,25 @@ const ForwardValidationPage = () => {
   }, [])
 
 
+  const isInitialEvidence =
+    data?.verdict === 'INSUFFICIENT_EVIDENCE'
+
   const verdictText = (
-    data?.verdict
-      ?.replaceAll('_', ' ')
-      ?? 'LOADING'
+    isInitialEvidence
+      ? 'FORWARD VALIDATION IN PROGRESS'
+      : (
+          data?.verdict
+            ?.replaceAll('_', ' ')
+          ?? 'LOADING'
+        )
+  )
+
+  const initialVerdictProgress = Math.min(
+    100,
+    (
+      (data?.selectedPredictions ?? 0)
+      / 20
+    ) * 100,
   )
 
   return (
@@ -186,21 +201,51 @@ const ForwardValidationPage = () => {
         </div>
       )}
 
-      <section className="rounded-2xl border border-white/10 bg-white/[0.025] p-6">
+      <section className="tm-gold-glow rounded-2xl border border-[#d4af37]/20 bg-[linear-gradient(135deg,rgba(212,175,55,0.055),rgba(255,255,255,0.012))] p-6">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <p className="text-xs uppercase tracking-[0.2em] text-white/30">
               Research verdict
             </p>
 
-            <h3 className="mt-2 text-2xl font-semibold">
+            <h3 className="mt-2 text-2xl font-semibold text-[#f0cf68]">
               {verdictText}
             </h3>
 
             <p className="mt-3 max-w-3xl text-sm leading-6 text-white/35">
-              {data?.verdictNote
-                ?? 'Loading frozen-candidate evidence...'}
+              {isInitialEvidence
+                ? (
+                    String(data?.selectedPredictions ?? 0)
+                    + ' selected forward trades collected. '
+                    + 'The first automatic research verdict is shown after 20 selected trades.'
+                  )
+                : (
+                    data?.verdictNote
+                    ?? 'Loading frozen-candidate evidence...'
+                  )}
             </p>
+
+            {isInitialEvidence && (
+              <div className="mt-5 max-w-xl">
+                <div className="flex justify-between text-xs text-[#b9aa84]">
+                  <span>Initial verdict progress</span>
+                  <span>
+                    {data?.selectedPredictions ?? 0} / 20 trades
+                  </span>
+                </div>
+
+                <div className="mt-2 h-2 overflow-hidden rounded-full bg-[#d4af37]/10">
+                  <div
+                    className="h-full rounded-full bg-[linear-gradient(90deg,#a77c20,#f0cf68)] transition-all duration-500"
+                    style={{
+                      width:
+                        initialVerdictProgress
+                        + '%',
+                    }}
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="rounded-xl border border-white/10 bg-black/10 px-4 py-3 text-sm text-white/45">
