@@ -381,6 +381,31 @@ const MicroPaperMonitor = () => {
                         )}
                       </span>
                     </div>
+
+                    <div className="mt-2 flex items-center justify-between gap-4">
+                      <span className="text-white/30">
+                        Trade success model
+                      </span>
+                      <span className="text-white/70">
+                        {pct(
+                          latest.tradeSelectorProbability
+                          * 100,
+                          1,
+                        )}
+                      </span>
+                    </div>
+
+                    <div className="mt-2 flex items-center justify-between gap-4">
+                      <span className="text-white/30">
+                        Trade outcome samples
+                      </span>
+                      <span className="text-white/70">
+                        {latest.tradeSelectorSamples}
+                        {latest.tradeSelectorReady
+                          ? ' · active'
+                          : ' · learning'}
+                      </span>
+                    </div>
                   </div>
                 </>
               )}
