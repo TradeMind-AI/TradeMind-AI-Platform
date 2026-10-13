@@ -187,3 +187,29 @@ export type MicroPaperStatus = {
   latest: MicroPaperLatest | null
   recentTrades: MicroPaperTrade[]
 }
+
+
+export type StagedForwardResearch = {
+  available: boolean
+  frozenAt: string
+  modelName: string
+  researchOnly: boolean
+  minimumNetProfitPct: number
+  newSnapshots: number
+  evaluableForwardRows: number
+  selectedPredictions: number
+  coveragePct: number
+  qualifiedTradeRatePct: number | null
+  avgSelectedNetReturnPct: number | null
+  minimumCheckpoint: number
+  preferredCheckpoint: number
+  minimumCheckpointProgressPct: number
+  preferredCheckpointProgressPct: number
+  verdict:
+    | 'NOT_FROZEN'
+    | 'INSUFFICIENT_EVIDENCE'
+    | 'PROMISING'
+    | 'FAILING_SO_FAR'
+  verdictNote: string
+  evidenceStatus: string
+}
