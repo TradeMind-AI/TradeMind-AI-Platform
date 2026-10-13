@@ -208,8 +208,7 @@ const indicatorLineData = (
       return [
         {
           time:
-            candle.time
-            as UTCTimestamp,
+            candle.time as UTCTimestamp,
           value,
         },
       ]
