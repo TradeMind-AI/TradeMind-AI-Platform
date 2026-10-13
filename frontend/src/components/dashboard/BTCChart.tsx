@@ -183,6 +183,398 @@ const exponentialMovingAverage = (
 }
 
 
+
+type StrategyKey =
+  | 'none'
+  | 'emaTrend'
+  | 'rsiReversion'
+  | 'bollingerBreakout'
+  | 'momentum'
+
+
+const latestFinite = (
+  values: Array<number | null>,
+) => {
+  for (
+    let index =
+      values.length - 1;
+    index >= 0;
+    index -= 1
+  ) {
+    const value =
+      values[index]
+
+    if (
+      value !== null
+      && Number.isFinite(
+        value,
+      )
+    ) {
+      return value
+    }
+  }
+
+  return null
+}
+
+
+const calculateRsi = (
+  values: number[],
+  period = 14,
+) => {
+  const output:
+    Array<number | null> =
+    new Array(
+      values.length,
+    ).fill(null)
+
+  if (
+    values.length
+    <= period
+  ) {
+    return output
+  }
+
+  let gains = 0
+  let losses = 0
+
+  for (
+    let index = 1;
+    index <= period;
+    index += 1
+  ) {
+    const change =
+      values[index]
+      - values[index - 1]
+
+    if (change >= 0) {
+      gains += change
+    } else {
+      losses += -change
+    }
+  }
+
+  let averageGain =
+    gains / period
+
+  let averageLoss =
+    losses / period
+
+  const currentRsi = () => {
+    if (averageLoss === 0) {
+      return 100
+    }
+
+    const rs =
+      averageGain
+      / averageLoss
+
+    return (
+      100
+      - 100 / (1 + rs)
+    )
+  }
+
+  output[period] =
+    currentRsi()
+
+  for (
+    let index =
+      period + 1;
+    index < values.length;
+    index += 1
+  ) {
+    const change =
+      values[index]
+      - values[index - 1]
+
+    const gain =
+      Math.max(
+        change,
+        0,
+      )
+
+    const loss =
+      Math.max(
+        -change,
+        0,
+      )
+
+    averageGain =
+      (
+        averageGain
+        * (
+          period - 1
+        )
+        + gain
+      )
+      / period
+
+    averageLoss =
+      (
+        averageLoss
+        * (
+          period - 1
+        )
+        + loss
+      )
+      / period
+
+    output[index] =
+      currentRsi()
+  }
+
+  return output
+}
+
+
+const calculateAtr = (
+  candles: BTCCandle[],
+  period = 14,
+) => {
+  if (
+    candles.length
+    <= period
+  ) {
+    return null
+  }
+
+  const ranges =
+    candles.map(
+      (
+        candle,
+        index,
+      ) => {
+        if (index === 0) {
+          return (
+            candle.high
+            - candle.low
+          )
+        }
+
+        const previousClose =
+          candles[
+            index - 1
+          ].close
+
+        return Math.max(
+          candle.high
+          - candle.low,
+          Math.abs(
+            candle.high
+            - previousClose,
+          ),
+          Math.abs(
+            candle.low
+            - previousClose,
+          ),
+        )
+      },
+    )
+
+  const recent =
+    ranges.slice(
+      -period,
+    )
+
+  return (
+    recent.reduce(
+      (sum, value) =>
+        sum + value,
+      0,
+    )
+    / recent.length
+  )
+}
+
+
+const calculateVwap = (
+  candles: BTCCandle[],
+) => {
+  let weighted = 0
+  let volume = 0
+
+  candles.forEach(
+    (candle) => {
+      const typical =
+        (
+          candle.high
+          + candle.low
+          + candle.close
+        )
+        / 3
+
+      weighted +=
+        typical
+        * candle.volume
+
+      volume +=
+        candle.volume
+    },
+  )
+
+  return (
+    volume > 0
+      ? weighted / volume
+      : null
+  )
+}
+
+
+const calculateMacd = (
+  closes: number[],
+) => {
+  const fast =
+    exponentialMovingAverage(
+      closes,
+      12,
+    )
+
+  const slow =
+    exponentialMovingAverage(
+      closes,
+      26,
+    )
+
+  const macdValues:
+    Array<number | null> =
+    closes.map(
+      (
+        _,
+        index,
+      ) => {
+        if (
+          fast[index] === null
+          || slow[index] === null
+        ) {
+          return null
+        }
+
+        return (
+          fast[index]!
+          - slow[index]!
+        )
+      },
+    )
+
+  const compact =
+    macdValues.filter(
+      (value):
+        value is number =>
+          value !== null,
+    )
+
+  const signalCompact =
+    exponentialMovingAverage(
+      compact,
+      9,
+    )
+
+  const signal:
+    Array<number | null> =
+    new Array(
+      closes.length,
+    ).fill(null)
+
+  let compactIndex = 0
+
+  for (
+    let index = 0;
+    index < macdValues.length;
+    index += 1
+  ) {
+    if (
+      macdValues[index]
+      !== null
+    ) {
+      signal[index] =
+        signalCompact[
+          compactIndex
+        ]
+
+      compactIndex += 1
+    }
+  }
+
+  const macd =
+    latestFinite(
+      macdValues,
+    )
+
+  const signalValue =
+    latestFinite(
+      signal,
+    )
+
+  return {
+    macd,
+    signal:
+      signalValue,
+    histogram:
+      (
+        macd !== null
+        && signalValue !== null
+      )
+        ? macd
+          - signalValue
+        : null,
+  }
+}
+
+
+const calculateStochastic = (
+  candles: BTCCandle[],
+  period = 14,
+) => {
+  if (
+    candles.length
+    < period
+  ) {
+    return null
+  }
+
+  const window =
+    candles.slice(
+      -period,
+    )
+
+  const highest =
+    Math.max(
+      ...window.map(
+        (candle) =>
+          candle.high,
+      ),
+    )
+
+  const lowest =
+    Math.min(
+      ...window.map(
+        (candle) =>
+          candle.low,
+      ),
+    )
+
+  const close =
+    window[
+      window.length - 1
+    ].close
+
+  if (highest === lowest) {
+    return 50
+  }
+
+  return (
+    (
+      close - lowest
+    )
+    / (
+      highest - lowest
+    )
+    * 100
+  )
+}
+
+
 const indicatorLineData = (
   candles: BTCCandle[],
   values:
@@ -244,6 +636,18 @@ const BTCChart = ({
     indicatorMenuOpen,
     setIndicatorMenuOpen,
   ] = useState(false)
+
+  const [
+    strategyMenuOpen,
+    setStrategyMenuOpen,
+  ] = useState(false)
+
+  const [
+    strategy,
+    setStrategy,
+  ] = useState<StrategyKey>(
+    'none',
+  )
 
   const chartContainerRef =
     useRef<HTMLDivElement | null>(null)
@@ -374,6 +778,86 @@ const BTCChart = ({
             - 2 * deviation
         }
 
+        const rsi14 =
+          calculateRsi(
+            closes,
+            14,
+          )
+
+        const macd =
+          calculateMacd(
+            closes,
+          )
+
+        const atr14 =
+          calculateAtr(
+            candles,
+            14,
+          )
+
+        const vwap =
+          calculateVwap(
+            candles,
+          )
+
+        const stochastic =
+          calculateStochastic(
+            candles,
+            14,
+          )
+
+        const averageVolume20 =
+          candles.length >= 20
+            ? (
+                candles
+                  .slice(-20)
+                  .reduce(
+                    (
+                      sum,
+                      candle,
+                    ) =>
+                      sum
+                      + candle.volume,
+                    0,
+                  )
+                / 20
+              )
+            : null
+
+        const currentVolume =
+          candles.length > 0
+            ? candles[
+                candles.length - 1
+              ].volume
+            : null
+
+        const latestClose =
+          closes.length > 0
+            ? closes[
+                closes.length - 1
+              ]
+            : null
+
+        const latestSma20 =
+          latestFinite(
+            sma20,
+          )
+
+        const latestEma20 =
+          latestFinite(
+            ema20,
+          )
+
+        const latestUpper =
+          latestFinite(
+            upper,
+          )
+
+        const latestLower =
+          latestFinite(
+            lower,
+          )
+
         return {
           ema20:
             indicatorLineData(
@@ -395,6 +879,35 @@ const BTCChart = ({
               candles,
               lower,
             ),
+          metrics: {
+            rsi14:
+              latestFinite(
+                rsi14,
+              ),
+            atr14,
+            vwap,
+            macd:
+              macd.macd,
+            macdSignal:
+              macd.signal,
+            macdHistogram:
+              macd.histogram,
+            stochastic,
+            volumeRatio:
+              (
+                currentVolume !== null
+                && averageVolume20
+                && averageVolume20 > 0
+              )
+                ? currentVolume
+                  / averageVolume20
+                : null,
+            latestClose,
+            latestSma20,
+            latestEma20,
+            latestUpper,
+            latestLower,
+          },
         }
       },
       [candles],
@@ -767,6 +1280,198 @@ const BTCChart = ({
   }
 
 
+  const applyStrategy = (
+    nextStrategy: StrategyKey,
+  ) => {
+    setStrategy(
+      nextStrategy,
+    )
+
+    setStrategyMenuOpen(
+      false,
+    )
+
+    if (
+      nextStrategy === 'emaTrend'
+    ) {
+      setIndicators(
+        (current) => ({
+          ...current,
+          ema20: true,
+          sma20: true,
+        }),
+      )
+    }
+
+    if (
+      nextStrategy
+      === 'bollingerBreakout'
+    ) {
+      setIndicators(
+        (current) => ({
+          ...current,
+          bollinger: true,
+        }),
+      )
+    }
+  }
+
+
+  const strategyStatus =
+    useMemo(
+      () => {
+        const metrics =
+          computedIndicators.metrics
+
+        if (
+          strategy === 'none'
+        ) {
+          return null
+        }
+
+        if (
+          metrics.latestClose === null
+        ) {
+          return {
+            signal: 'WAIT',
+            note: 'Waiting for enough candle history.',
+          }
+        }
+
+        if (
+          strategy === 'emaTrend'
+        ) {
+          if (
+            metrics.latestEma20 === null
+            || metrics.latestSma20 === null
+          ) {
+            return {
+              signal: 'WAIT',
+              note: 'Needs at least 20 candles.',
+            }
+          }
+
+          return (
+            metrics.latestEma20
+            > metrics.latestSma20
+              ? {
+                  signal: 'LONG BIAS',
+                  note: 'EMA 20 is above SMA 20.',
+                }
+              : {
+                  signal: 'SHORT BIAS',
+                  note: 'EMA 20 is below SMA 20.',
+                }
+          )
+        }
+
+        if (
+          strategy === 'rsiReversion'
+        ) {
+          if (
+            computedIndicators.metrics.rsi14
+            === null
+          ) {
+            return {
+              signal: 'WAIT',
+              note: 'Needs RSI history.',
+            }
+          }
+
+          const value =
+            computedIndicators.metrics.rsi14
+
+          if (value <= 30) {
+            return {
+              signal: 'LONG WATCH',
+              note: 'RSI is in an oversold zone.',
+            }
+          }
+
+          if (value >= 70) {
+            return {
+              signal: 'SHORT WATCH',
+              note: 'RSI is in an overbought zone.',
+            }
+          }
+
+          return {
+            signal: 'HOLD',
+            note: 'RSI is between 30 and 70.',
+          }
+        }
+
+        if (
+          strategy
+          === 'bollingerBreakout'
+        ) {
+          if (
+            metrics.latestUpper === null
+            || metrics.latestLower === null
+          ) {
+            return {
+              signal: 'WAIT',
+              note: 'Needs Bollinger Band history.',
+            }
+          }
+
+          if (
+            metrics.latestClose
+            > metrics.latestUpper
+          ) {
+            return {
+              signal: 'BREAKOUT UP',
+              note: 'Close is above the upper band.',
+            }
+          }
+
+          if (
+            metrics.latestClose
+            < metrics.latestLower
+          ) {
+            return {
+              signal: 'BREAKOUT DOWN',
+              note: 'Close is below the lower band.',
+            }
+          }
+
+          return {
+            signal: 'HOLD',
+            note: 'Price remains inside the bands.',
+          }
+        }
+
+        const histogram =
+          metrics.macdHistogram
+
+        if (
+          histogram === null
+        ) {
+          return {
+            signal: 'WAIT',
+            note: 'Needs MACD history.',
+          }
+        }
+
+        return (
+          histogram > 0
+            ? {
+                signal: 'LONG BIAS',
+                note: 'MACD histogram is positive.',
+              }
+            : {
+                signal: 'SHORT BIAS',
+                note: 'MACD histogram is negative.',
+              }
+        )
+      },
+      [
+        computedIndicators,
+        strategy,
+      ],
+    )
+
+
   const latest =
     candles.length > 0
       ? candles[
@@ -906,6 +1611,72 @@ const BTCChart = ({
               )}
             </div>
 
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() =>
+                  setStrategyMenuOpen(
+                    (value) =>
+                      !value,
+                  )
+                }
+                className="rounded-lg border border-[#d4af37]/20 bg-[#d4af37]/[0.04] px-3 py-2 text-xs font-medium text-[#e8d9ad] transition hover:border-[#d4af37]/35 hover:bg-[#d4af37]/[0.08]"
+              >
+                Strategies
+              </button>
+
+              {strategyMenuOpen && (
+                <div className="absolute right-0 z-20 mt-2 w-72 rounded-xl border border-[#d4af37]/20 bg-[#0b0b0a]/95 p-2 shadow-2xl shadow-black/60 backdrop-blur">
+                  {([
+                    ['none', 'None', 'No strategy overlay'],
+                    ['emaTrend', 'EMA Trend', 'EMA 20 vs SMA 20'],
+                    ['rsiReversion', 'RSI Mean Reversion', 'Watch RSI 30 / 70 zones'],
+                    ['bollingerBreakout', 'Bollinger Breakout', 'Watch closes outside the bands'],
+                    ['momentum', 'MACD Momentum', 'Use MACD histogram direction'],
+                  ] as Array<
+                    [
+                      StrategyKey,
+                      string,
+                      string,
+                    ]
+                  >).map(
+                    ([
+                      key,
+                      label,
+                      description,
+                    ]) => (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() =>
+                          applyStrategy(
+                            key,
+                          )
+                        }
+                        className="w-full rounded-lg px-3 py-2.5 text-left transition hover:bg-[#d4af37]/[0.055]"
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-sm text-white/75">
+                            {label}
+                          </span>
+
+                          {strategy === key && (
+                            <span className="text-[10px] uppercase tracking-wider text-[#f0cf68]">
+                              active
+                            </span>
+                          )}
+                        </div>
+
+                        <p className="mt-1 text-[11px] text-white/25">
+                          {description}
+                        </p>
+                      </button>
+                    ),
+                  )}
+                </div>
+              )}
+            </div>
+
             <button
               type="button"
               onClick={() =>
@@ -950,6 +1721,203 @@ const BTCChart = ({
           </div>
         </div>
       </div>
+
+      <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-6">
+        {[
+          [
+            'RSI 14',
+            computedIndicators.metrics.rsi14 !== null
+              ? computedIndicators.metrics.rsi14.toFixed(1)
+              : '—',
+          ],
+          [
+            'MACD',
+            computedIndicators.metrics.macdHistogram !== null
+              ? computedIndicators.metrics.macdHistogram.toFixed(2)
+              : '—',
+          ],
+          [
+            'ATR 14',
+            computedIndicators.metrics.atr14 !== null
+              ? '
+        {indicators.ema20 && (
+          <span className="rounded-full border border-[#d89c45]/20 bg-[#d89c45]/[0.05] px-2.5 py-1 text-[#d9b36d]">
+            EMA 20
+          </span>
+        )}
+
+        {indicators.sma20 && (
+          <span className="rounded-full border border-[#e7c85e]/20 bg-[#e7c85e]/[0.05] px-2.5 py-1 text-[#e7c85e]">
+            SMA 20
+          </span>
+        )}
+
+        {indicators.bollinger && (
+          <span className="rounded-full border border-[#d5be7d]/20 bg-[#d5be7d]/[0.04] px-2.5 py-1 text-[#d5be7d]">
+            Bollinger 20,2
+          </span>
+        )}
+      </div>
+
+      <div className="relative mt-4 min-h-[520px] overflow-hidden rounded-xl border border-[#d4af37]/10 bg-[#080807]">
+        <div
+          ref={chartContainerRef}
+          className="w-full"
+        />
+
+        {loading
+          && candles.length === 0 && (
+          <div className="absolute inset-0 flex items-center justify-center bg-[#080d18]/70 text-sm text-white/35 backdrop-blur-sm">
+            Loading live candles...
+          </div>
+        )}
+
+        {error && (
+          <div className="absolute left-4 top-4 rounded-lg border border-amber-400/20 bg-[#111827]/95 px-4 py-3 text-xs text-amber-200">
+            {error}
+          </div>
+        )}
+      </div>
+
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-white/5 pt-4 text-xs text-white/25">
+        <span>
+          Pan · zoom · crosshair · indicators · reset view
+        </span>
+
+        <span>
+          Candles refresh every 5s · AI overlay updates on completed 10m model candles.
+        </span>
+      </div>
+    </section>
+  )
+}
+
+
+export default BTCChart
+
+                + computedIndicators.metrics.atr14.toFixed(2)
+              : '—',
+          ],
+          [
+            'VWAP',
+            computedIndicators.metrics.vwap !== null
+              ? '
+        {indicators.ema20 && (
+          <span className="rounded-full border border-[#d89c45]/20 bg-[#d89c45]/[0.05] px-2.5 py-1 text-[#d9b36d]">
+            EMA 20
+          </span>
+        )}
+
+        {indicators.sma20 && (
+          <span className="rounded-full border border-[#e7c85e]/20 bg-[#e7c85e]/[0.05] px-2.5 py-1 text-[#e7c85e]">
+            SMA 20
+          </span>
+        )}
+
+        {indicators.bollinger && (
+          <span className="rounded-full border border-[#d5be7d]/20 bg-[#d5be7d]/[0.04] px-2.5 py-1 text-[#d5be7d]">
+            Bollinger 20,2
+          </span>
+        )}
+      </div>
+
+      <div className="relative mt-4 min-h-[520px] overflow-hidden rounded-xl border border-[#d4af37]/10 bg-[#080807]">
+        <div
+          ref={chartContainerRef}
+          className="w-full"
+        />
+
+        {loading
+          && candles.length === 0 && (
+          <div className="absolute inset-0 flex items-center justify-center bg-[#080d18]/70 text-sm text-white/35 backdrop-blur-sm">
+            Loading live candles...
+          </div>
+        )}
+
+        {error && (
+          <div className="absolute left-4 top-4 rounded-lg border border-amber-400/20 bg-[#111827]/95 px-4 py-3 text-xs text-amber-200">
+            {error}
+          </div>
+        )}
+      </div>
+
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-white/5 pt-4 text-xs text-white/25">
+        <span>
+          Pan · zoom · crosshair · indicators · reset view
+        </span>
+
+        <span>
+          Candles refresh every 5s · AI overlay updates on completed 10m model candles.
+        </span>
+      </div>
+    </section>
+  )
+}
+
+
+export default BTCChart
+
+                + computedIndicators.metrics.vwap.toLocaleString(
+                    'en-US',
+                    {
+                      maximumFractionDigits: 2,
+                    },
+                  )
+              : '—',
+          ],
+          [
+            'Stoch %K',
+            computedIndicators.metrics.stochastic !== null
+              ? computedIndicators.metrics.stochastic.toFixed(1)
+              : '—',
+          ],
+          [
+            'Rel Volume',
+            computedIndicators.metrics.volumeRatio !== null
+              ? computedIndicators.metrics.volumeRatio.toFixed(2)
+                + 'x'
+              : '—',
+          ],
+        ].map(
+          ([
+            label,
+            value,
+          ]) => (
+            <div
+              key={label}
+              className="rounded-lg border border-[#d4af37]/10 bg-black/20 px-3 py-2.5"
+            >
+              <p className="text-[10px] uppercase tracking-wider text-white/25">
+                {label}
+              </p>
+
+              <p className="mt-1 text-sm font-medium text-[#e7d8ad]">
+                {value}
+              </p>
+            </div>
+          ),
+        )}
+      </div>
+
+      {strategyStatus && (
+        <div className="mt-3 flex flex-wrap items-center gap-3 rounded-xl border border-[#d4af37]/15 bg-[#d4af37]/[0.035] px-4 py-3 text-xs">
+          <span className="uppercase tracking-[0.16em] text-[#9f8440]">
+            Strategy
+          </span>
+
+          <span className="font-semibold text-[#f0cf68]">
+            {strategyStatus.signal}
+          </span>
+
+          <span className="text-white/35">
+            {strategyStatus.note}
+          </span>
+
+          <span className="ml-auto text-white/20">
+            Research overlay · not an order
+          </span>
+        </div>
+      )}
 
       <div className="mt-4 flex flex-wrap gap-2 text-[11px]">
         {indicators.ema20 && (
