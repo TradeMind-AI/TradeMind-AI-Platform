@@ -2,16 +2,16 @@ import { Link } from 'react-router-dom'
 
 const Landing = () => {
   return (
-    <main className="min-h-screen bg-[#030712] text-white">
+    <main className="min-h-screen bg-[#050505] text-[#f6f0df]">
       {/* Navigation */}
       <nav className="mx-auto flex max-w-7xl items-center justify-between px-6 py-6 lg:px-8">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/5">
-            <span className="text-lg font-bold">T</span>
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-[#d4af37]/35 bg-[#d4af37]/[0.06] shadow-[0_0_26px_rgba(212,175,55,0.08)]">
+            <span className="text-lg font-bold text-[#f0cf68]">T</span>
           </div>
 
           <span className="text-xl font-semibold tracking-tight">
-            TradeMind <span className="text-white/50">AI</span>
+            TradeMind <span className="text-[#d4af37]">AI</span>
           </span>
         </div>
 
@@ -34,7 +34,7 @@ const Landing = () => {
             Log in
           </button>
 
-          <button className="rounded-lg border border-white/10 bg-white px-5 py-2.5 text-sm font-medium text-black transition hover:bg-white/90">
+          <button className="rounded-lg border border-[#d4af37]/50 bg-[linear-gradient(135deg,#f0cf68,#d4af37)] px-5 py-2.5 text-sm font-semibold text-black shadow-[0_10px_30px_rgba(212,175,55,0.12)] transition hover:brightness-110">
             Get Started
           </button>
         </div>
@@ -43,7 +43,7 @@ const Landing = () => {
       {/* Hero */}
       <section className="relative overflow-hidden">
         {/* Background glow */}
-        <div className="pointer-events-none absolute left-1/2 top-20 h-96 w-96 -translate-x-1/2 rounded-full bg-blue-500/10 blur-3xl" />
+        <div className="pointer-events-none absolute left-1/2 top-20 h-96 w-96 -translate-x-1/2 rounded-full bg-[#d4af37]/10 blur-3xl" />
 
         <div className="relative mx-auto flex min-h-[calc(100vh-88px)] max-w-7xl flex-col items-center justify-center px-6 py-24 text-center lg:px-8">
           
@@ -55,7 +55,7 @@ const Landing = () => {
           {/* Main heading */}
           <h1 className="max-w-5xl text-5xl font-semibold leading-[1.05] tracking-tight sm:text-6xl lg:text-8xl">
             Trade with
-            <span className="block text-white/40">
+            <span className="block text-[#c5a64a]">
               intelligence.
             </span>
           </h1>
@@ -63,19 +63,19 @@ const Landing = () => {
           {/* Description */}
           <p className="mt-8 max-w-2xl text-base leading-7 text-white/50 sm:text-lg">
             TradeMind AI combines market data, machine learning, and
-            multi-agent intelligence to analyze Bitcoin markets and make
-            systematic trading decisions.
+            cost-aware validation to analyze Bitcoin markets and support
+            systematic paper-trading research.
           </p>
 
           {/* Buttons */}
           <div className="mt-10 flex flex-col gap-4 sm:flex-row">
-            <button className="rounded-xl bg-white px-7 py-3.5 text-sm font-semibold text-black transition hover:bg-white/90">
+            <button className="rounded-xl border border-[#d4af37]/50 bg-[linear-gradient(135deg,#f0cf68,#d4af37)] px-7 py-3.5 text-sm font-semibold text-black shadow-[0_12px_34px_rgba(212,175,55,0.14)] transition hover:brightness-110">
               Start Paper Trading
             </button>
 
             <Link
               to="/dashboard"
-              className="rounded-xl border border-white/10 bg-white/[0.03] px-7 py-3.5 text-sm font-medium text-white transition hover:bg-white/[0.07]"
+              className="rounded-xl border border-[#d4af37]/20 bg-[#d4af37]/[0.035] px-7 py-3.5 text-sm font-medium text-[#e8d9ad] transition hover:border-[#d4af37]/35 hover:bg-[#d4af37]/[0.07] hover:text-[#f0cf68]"
             >
               Explore the Platform
             </Link>
@@ -136,7 +136,7 @@ const Landing = () => {
                       fill="none"
                       stroke="currentColor"
                       strokeWidth="3"
-                      className="text-white/70"
+                      className="text-[#d4af37]"
                     />
                   </svg>
 
@@ -208,9 +208,9 @@ const Landing = () => {
                   "Models learn patterns from historical Bitcoin market data and engineered features.",
               },
               {
-                title: "Multi-Agent AI",
+                title: "Multi-Timeframe Research",
                 description:
-                  "Specialized agents analyze technical, market, forecasting, and risk information.",
+                  "Independent models and validation pipelines compare signals across multiple market horizons.",
               },
               {
                 title: "Risk-Aware Execution",
