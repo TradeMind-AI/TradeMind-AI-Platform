@@ -43,6 +43,11 @@ type VolumeSeriesHandle = {
   setData: (
     data: HistogramData[],
   ) => void
+  applyOptions: (
+    options: {
+      visible?: boolean
+    },
+  ) => void
 }
 
 type LineSeriesHandle = {
