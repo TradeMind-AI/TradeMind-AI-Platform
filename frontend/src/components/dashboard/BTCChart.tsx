@@ -186,6 +186,9 @@ const exponentialMovingAverage = (
 
 type StrategyKey =
   | 'none'
+  | 'trademind10m'
+  | 'stagedMicro'
+  | 'onlineMicro'
   | 'emaTrend'
   | 'rsiReversion'
   | 'bollingerBreakout'
@@ -1292,6 +1295,17 @@ const BTCChart = ({
     )
 
     if (
+      nextStrategy === 'trademind10m'
+    ) {
+      setIndicators(
+        (current) => ({
+          ...current,
+          ai: true,
+        }),
+      )
+    }
+
+    if (
       nextStrategy === 'emaTrend'
     ) {
       setIndicators(
@@ -1327,6 +1341,55 @@ const BTCChart = ({
           strategy === 'none'
         ) {
           return null
+        }
+
+        if (
+          strategy === 'trademind10m'
+        ) {
+          const latestPoint =
+            aiPoints.length > 0
+              ? aiPoints[
+                  aiPoints.length - 1
+                ]
+              : null
+
+          if (!latestPoint) {
+            return {
+              signal: 'WAIT',
+              note: 'Waiting for the frozen 10m AI strategy output.',
+            }
+          }
+
+          return {
+            signal:
+              latestPoint.signal,
+            note:
+              'Frozen 10m AI model · '
+              + 'confidence '
+              + (
+                latestPoint.confidence
+                * 100
+              ).toFixed(1)
+              + '% · 60m research horizon.',
+          }
+        }
+
+        if (
+          strategy === 'stagedMicro'
+        ) {
+          return {
+            signal: 'FORWARD TEST',
+            note: 'Frozen staged microstructure candidate. Detailed evidence is tracked on Forward Validation.',
+          }
+        }
+
+        if (
+          strategy === 'onlineMicro'
+        ) {
+          return {
+            signal: 'EXPERIMENTAL',
+            note: 'Online micro paper learner. Research-only and not a deployable trading strategy.',
+          }
         }
 
         if (
@@ -1466,6 +1529,7 @@ const BTCChart = ({
         )
       },
       [
+        aiPoints,
         computedIndicators,
         strategy,
       ],
@@ -1629,6 +1693,9 @@ const BTCChart = ({
                 <div className="absolute right-0 z-20 mt-2 w-72 rounded-xl border border-[#d4af37]/20 bg-[#0b0b0a]/95 p-2 shadow-2xl shadow-black/60 backdrop-blur">
                   {([
                     ['none', 'None', 'No strategy overlay'],
+                    ['trademind10m', 'TradeMind Frozen 10m AI', 'Project strategy · frozen XGBoost · 60m horizon'],
+                    ['stagedMicro', 'TradeMind Staged Micro', 'Project research · TRADE/SKIP → LONG/SHORT → profitability'],
+                    ['onlineMicro', 'TradeMind Online Micro', 'Experimental online SGD paper learner'],
                     ['emaTrend', 'EMA Trend', 'EMA 20 vs SMA 20'],
                     ['rsiReversion', 'RSI Mean Reversion', 'Watch RSI 30 / 70 zones'],
                     ['bollingerBreakout', 'Bollinger Breakout', 'Watch closes outside the bands'],
