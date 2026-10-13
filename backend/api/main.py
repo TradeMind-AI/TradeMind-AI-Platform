@@ -54,6 +54,23 @@ MICRO_PAPER_EVALUATION_FILE = (
     / "evaluation_metrics.json"
 )
 
+STAGED_FORWARD_DIR = (
+    PROJECT_ROOT
+    / "data"
+    / "processed"
+    / "staged_micro_forward"
+)
+
+STAGED_FORWARD_EVALUATION_FILE = (
+    STAGED_FORWARD_DIR
+    / "forward_evaluation.json"
+)
+
+STAGED_FORWARD_MANIFEST_FILE = (
+    STAGED_FORWARD_DIR
+    / "frozen_candidate_manifest.json"
+)
+
 MANUAL_PAPER_STARTING_USDT = 10000.0
 MANUAL_PAPER_FEE_RATE = 0.0005
 MANUAL_PAPER_LOCK = threading.Lock()
@@ -272,6 +289,197 @@ def get_timeframes():
         get_ready_state(timeframe)
         for timeframe in SUPPORTED_TIMEFRAMES
     ]
+
+
+
+@app.get("/api/research/staged-forward")
+def get_staged_forward_research():
+    evaluation = {}
+    manifest = {}
+
+    if STAGED_FORWARD_EVALUATION_FILE.exists():
+        try:
+            evaluation = json.loads(
+                STAGED_FORWARD_EVALUATION_FILE.read_text(
+                    encoding="utf-8",
+                )
+            )
+        except (
+            json.JSONDecodeError,
+            OSError,
+        ):
+            evaluation = {}
+
+    if STAGED_FORWARD_MANIFEST_FILE.exists():
+        try:
+            manifest = json.loads(
+                STAGED_FORWARD_MANIFEST_FILE.read_text(
+                    encoding="utf-8",
+                )
+            )
+        except (
+            json.JSONDecodeError,
+            OSError,
+        ):
+            manifest = {}
+
+    frozen_at = (
+        evaluation.get("frozen_at")
+        or manifest.get("frozen_at")
+        or ""
+    )
+
+    minimum_checkpoint = int(
+        evaluation.get(
+            "minimum_checkpoint_new_snapshots",
+            manifest.get(
+                "forward_checkpoints",
+                {},
+            ).get(
+                "minimum",
+                25000,
+            ),
+        )
+    )
+
+    preferred_checkpoint = int(
+        evaluation.get(
+            "preferred_checkpoint_new_snapshots",
+            manifest.get(
+                "forward_checkpoints",
+                {},
+            ).get(
+                "preferred",
+                50000,
+            ),
+        )
+    )
+
+    new_snapshots = int(
+        evaluation.get(
+            "new_raw_snapshots",
+            0,
+        )
+    )
+
+    selected_predictions = int(
+        evaluation.get(
+            "selected_predictions",
+            0,
+        )
+    )
+
+    qualified_rate = evaluation.get(
+        "qualified_trade_rate_pct"
+    )
+
+    avg_return = evaluation.get(
+        "avg_selected_net_return_pct"
+    )
+
+    if not frozen_at:
+        verdict = "NOT_FROZEN"
+        verdict_note = (
+            "No frozen staged candidate is available yet."
+        )
+    elif selected_predictions < 20:
+        verdict = "INSUFFICIENT_EVIDENCE"
+        verdict_note = (
+            "The candidate is frozen, but there are too few "
+            "selected forward trades for a reliable conclusion."
+        )
+    elif (
+        qualified_rate is not None
+        and avg_return is not None
+        and float(qualified_rate) >= 55.0
+        and float(avg_return) > 0.0
+    ):
+        verdict = "PROMISING"
+        verdict_note = (
+            "Forward evidence is positive so far, but the "
+            "candidate remains research-only until the planned "
+            "checkpoint is reached."
+        )
+    else:
+        verdict = "FAILING_SO_FAR"
+        verdict_note = (
+            "Current forward evidence is not positive. Keep the "
+            "candidate frozen and continue collecting data."
+        )
+
+    return {
+        "available": bool(frozen_at),
+        "frozenAt": frozen_at,
+        "modelName": "staged_micro_forward_frozen_v1",
+        "researchOnly": True,
+        "minimumNetProfitPct": safe_float(
+            manifest.get(
+                "min_net_profit_pct",
+                0.00075,
+            )
+        ) * 100.0,
+        "newSnapshots": new_snapshots,
+        "evaluableForwardRows": int(
+            evaluation.get(
+                "evaluable_forward_rows",
+                0,
+            )
+        ),
+        "selectedPredictions": selected_predictions,
+        "coveragePct": safe_float(
+            evaluation.get(
+                "coverage_pct",
+                0.0,
+            )
+        ),
+        "qualifiedTradeRatePct": (
+            None
+            if qualified_rate is None
+            else safe_float(
+                qualified_rate
+            )
+        ),
+        "avgSelectedNetReturnPct": (
+            None
+            if avg_return is None
+            else safe_float(
+                avg_return
+            )
+        ),
+        "minimumCheckpoint": minimum_checkpoint,
+        "preferredCheckpoint": preferred_checkpoint,
+        "minimumCheckpointProgressPct": safe_float(
+            evaluation.get(
+                "minimum_checkpoint_progress_pct",
+                (
+                    new_snapshots
+                    / minimum_checkpoint
+                    * 100.0
+                    if minimum_checkpoint > 0
+                    else 0.0
+                ),
+            )
+        ),
+        "preferredCheckpointProgressPct": safe_float(
+            evaluation.get(
+                "preferred_checkpoint_progress_pct",
+                (
+                    new_snapshots
+                    / preferred_checkpoint
+                    * 100.0
+                    if preferred_checkpoint > 0
+                    else 0.0
+                ),
+            )
+        ),
+        "verdict": verdict,
+        "verdictNote": verdict_note,
+        "evidenceStatus": (
+            "Forward-only, frozen candidate"
+            if frozen_at
+            else "Not frozen"
+        ),
+    }
 
 
 @app.get("/api/dashboard")
