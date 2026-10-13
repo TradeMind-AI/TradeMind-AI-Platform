@@ -13,6 +13,9 @@ import BTCChart, {
   type BTCCandle,
 } from '../../components/dashboard/BTCChart'
 
+import TechnicalAnalysisPanel
+  from '../../components/dashboard/TechnicalAnalysisPanel'
+
 import RecentSignals
   from '../../components/dashboard/RecentSignals'
 
@@ -450,6 +453,12 @@ const Dashboard = () => {
                   aiPoints={
                     aiPoints
                   }
+                />
+              </div>
+
+              <div className="mt-6">
+                <TechnicalAnalysisPanel
+                  candles={candles}
                 />
               </div>
 
