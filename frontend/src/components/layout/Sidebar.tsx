@@ -1,30 +1,41 @@
+import {
+  NavLink,
+} from 'react-router-dom'
+
+
 type SidebarItemProps = {
   label: string
-  active?: boolean
+  to: string
 }
+
 
 const SidebarItem = ({
   label,
-  active = false,
+  to,
 }: SidebarItemProps) => {
   return (
-    <button
-      className={[
-        'w-full rounded-lg px-4 py-3 text-left text-sm transition',
-        active
+    <NavLink
+      to={to}
+      className={({ isActive }) => [
+        'block w-full rounded-lg px-4 py-3 text-left text-sm transition',
+        isActive
           ? 'bg-white/10 text-white'
           : 'text-white/40 hover:bg-white/[0.04] hover:text-white',
       ].join(' ')}
     >
       {label}
-    </button>
+    </NavLink>
   )
 }
+
 
 const Sidebar = () => {
   return (
     <aside className="hidden min-h-screen w-64 border-r border-white/5 bg-[#050914] px-5 py-6 lg:block">
-      <div className="flex items-center gap-3 px-2">
+      <NavLink
+        to="/"
+        className="flex items-center gap-3 px-2"
+      >
         <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/5">
           <span className="font-semibold">
             T
@@ -40,28 +51,32 @@ const Sidebar = () => {
             Trading Intelligence
           </p>
         </div>
-      </div>
+      </NavLink>
 
       <nav className="mt-10 space-y-2">
         <SidebarItem
           label="Overview"
-          active
+          to="/dashboard"
         />
 
         <SidebarItem
           label="Signals"
+          to="/dashboard/signals"
         />
 
         <SidebarItem
           label="Performance"
+          to="/dashboard/performance"
         />
 
         <SidebarItem
           label="Model"
+          to="/dashboard/model"
         />
 
         <SidebarItem
           label="Risk"
+          to="/dashboard/risk"
         />
       </nav>
 
@@ -77,5 +92,6 @@ const Sidebar = () => {
     </aside>
   )
 }
+
 
 export default Sidebar
