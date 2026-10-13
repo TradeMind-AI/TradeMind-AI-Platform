@@ -48,6 +48,12 @@ MICRO_PAPER_TRADE_FILE = (
     / "trades.csv"
 )
 
+
+MICRO_PAPER_EVALUATION_FILE = (
+    MICRO_PAPER_DIR
+    / "evaluation_metrics.json"
+)
+
 MANUAL_PAPER_STARTING_USDT = 10000.0
 MANUAL_PAPER_FEE_RATE = 0.0005
 MANUAL_PAPER_LOCK = threading.Lock()
@@ -1286,6 +1292,12 @@ def get_micro_paper_status():
                                 "decision_source"
                             )
                         ),
+                    "effectiveEntryThreshold":
+                        safe_float(
+                            row.get(
+                                "effective_entry_threshold"
+                            )
+                        ),
                     "tradeDirection":
                         int(
                             safe_float(
@@ -1428,6 +1440,108 @@ def get_micro_paper_status():
         except Exception:
             recent_trades = []
 
+    evaluation = {}
+
+    if MICRO_PAPER_EVALUATION_FILE.exists():
+        try:
+            evaluation = json.loads(
+                MICRO_PAPER_EVALUATION_FILE.read_text(
+                    encoding="utf-8",
+                )
+            )
+        except (
+            json.JSONDecodeError,
+            OSError,
+        ):
+            evaluation = {}
+
+    evaluation_total = int(
+        evaluation.get(
+            "total",
+            0,
+        )
+    )
+
+    evaluation_correct = int(
+        evaluation.get(
+            "correct",
+            0,
+        )
+    )
+
+    prequential_accuracy_pct = (
+        evaluation_correct
+        / evaluation_total
+        * 100.0
+        if evaluation_total > 0
+        else 0.0
+    )
+
+    recalls = []
+
+    confusion = evaluation.get(
+        "confusion",
+        {},
+    )
+
+    for label in [
+        "-1",
+        "0",
+        "1",
+    ]:
+        row_values = confusion.get(
+            label,
+            {},
+        )
+
+        row_total = sum(
+            int(value)
+            for value in row_values.values()
+        )
+
+        if row_total > 0:
+            recalls.append(
+                int(
+                    row_values.get(
+                        label,
+                        0,
+                    )
+                )
+                / row_total
+            )
+
+    balanced_accuracy_pct = (
+        float(
+            sum(recalls)
+            / len(recalls)
+            * 100.0
+        )
+        if recalls
+        else 0.0
+    )
+
+    high_conf_total = int(
+        evaluation.get(
+            "high_conf_total",
+            0,
+        )
+    )
+
+    high_conf_correct = int(
+        evaluation.get(
+            "high_conf_correct",
+            0,
+        )
+    )
+
+    high_conf_accuracy_pct = (
+        high_conf_correct
+        / high_conf_total
+        * 100.0
+        if high_conf_total > 0
+        else 0.0
+    )
+
     closed_trades = int(
         account.get(
             "closed_trades",
@@ -1459,13 +1573,69 @@ def get_micro_paper_status():
         "position"
     )
 
+    heartbeat_age_seconds = None
+    learner_running = False
+
+    if latest is not None:
+        try:
+            heartbeat_time = pd.Timestamp(
+                latest[
+                    "timestamp"
+                ]
+            )
+
+            now_utc = pd.Timestamp.now(
+                tz="UTC"
+            )
+
+            if heartbeat_time.tzinfo is None:
+                heartbeat_time = heartbeat_time.tz_localize(
+                    "UTC"
+                )
+            else:
+                heartbeat_time = heartbeat_time.tz_convert(
+                    "UTC"
+                )
+
+            heartbeat_age_seconds = max(
+                0.0,
+                float(
+                    (
+                        now_utc
+                        - heartbeat_time
+                    ).total_seconds()
+                ),
+            )
+
+            learner_running = (
+                heartbeat_age_seconds
+                <= 20.0
+            )
+        except Exception:
+            learner_running = False
+
     return {
-        "running": latest is not None,
+        "running": learner_running,
         "message": (
-            "Micro paper learner data available."
-            if latest is not None
-            else "Waiting for learner snapshots."
+            "Micro paper learner is actively updating."
+            if learner_running
+            else (
+                "Micro paper learner snapshot is stale. "
+                "Start the learner and collector to resume learning."
+                if latest is not None
+                else "Waiting for learner snapshots."
+            )
         ),
+        "heartbeatAgeSeconds":
+            heartbeat_age_seconds,
+        "prequentialAccuracyPct":
+            prequential_accuracy_pct,
+        "balancedAccuracyPct":
+            balanced_accuracy_pct,
+        "highConfidenceAccuracyPct":
+            high_conf_accuracy_pct,
+        "evaluationSamples":
+            evaluation_total,
         "equityUsdt":
             safe_float(
                 account.get(
