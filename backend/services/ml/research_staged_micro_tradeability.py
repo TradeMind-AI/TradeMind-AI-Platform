@@ -80,6 +80,13 @@ TRAILING_ACTIVATION_PCT = 0.0010
 TRAILING_DISTANCE_PCT = 0.0008
 FEE_RATE_PER_SIDE = 0.0005
 
+# A setup is only considered genuinely tradeable if
+# the simulated side finishes at least this much NET
+# positive after fees and the current TP/SL/trailing
+# policy. This removes tiny borderline "wins" that are
+# too fragile to be useful.
+MIN_NET_PROFIT_PCT = 0.0005
+
 TRAIN_FRACTION = 0.60
 SELECTOR_FRACTION = 0.20
 VALIDATION_FRACTION = 0.20
@@ -544,7 +551,7 @@ def add_future_path_labels(
             short_return,
         )
 
-        if best_return > 0:
+        if best_return >= MIN_NET_PROFIT_PCT:
             tradeable[index] = 1
 
             direction[index] = (
@@ -814,7 +821,7 @@ def search_thresholds(
                     profitable_rate = (
                         np.mean(
                             selected_returns
-                            > 0
+                            >= MIN_NET_PROFIT_PCT
                         )
                         * 100.0
                     )
@@ -940,7 +947,7 @@ def main() -> None:
 
     print()
     print(
-        "Stage 1: TRADE vs NO TRADE"
+        "Stage 1: HIGH-QUALITY TRADE vs SKIP"
     )
     print(
         "Stage 2: LONG vs SHORT "
@@ -949,7 +956,8 @@ def main() -> None:
     print(
         "Stage 3: PROFITABILITY SELECTOR "
         "(learns whether the proposed trade "
-        "actually finishes net-positive)"
+        "actually clears the minimum net-profit "
+        "requirement)"
     )
 
     print()
@@ -965,6 +973,8 @@ def main() -> None:
         f"{TRAILING_DISTANCE_PCT * 100:.3f}% "
         f"round_trip_fee="
         f"{2 * FEE_RATE_PER_SIDE * 100:.3f}% "
+        f"min_net_profit="
+        f"{MIN_NET_PROFIT_PCT * 100:.3f}% "
         f"horizon={HORIZON_SECONDS}s"
     )
 
@@ -1114,7 +1124,7 @@ def main() -> None:
     print()
     print(
         "Training Stage 1 "
-        "(TRADE vs NO TRADE)..."
+        "(HIGH-QUALITY TRADE vs SKIP)..."
     )
 
     stage1_train_y = (
@@ -1219,7 +1229,7 @@ def main() -> None:
 
     selector_target = (
         selector_predicted_return
-        > 0
+        >= MIN_NET_PROFIT_PCT
     ).astype(int)
 
     selector_frame = (
@@ -1404,7 +1414,7 @@ def main() -> None:
     base_profitable_rate = (
         np.mean(
             validation_predicted_return
-            > 0
+            >= MIN_NET_PROFIT_PCT
         )
         * 100.0
     )
@@ -1590,6 +1600,8 @@ def main() -> None:
             TRAILING_DISTANCE_PCT,
         "fee_rate_per_side":
             FEE_RATE_PER_SIDE,
+        "min_net_profit_pct":
+            MIN_NET_PROFIT_PCT,
         "note":
             (
                 "Research only. Stage 1 learns "
@@ -1614,7 +1626,7 @@ def main() -> None:
     print("=" * 100)
 
     print(
-        f"Stage 1 TRADE accuracy = "
+        f"Stage 1 HIGH-QUALITY TRADE accuracy = "
         f"{stage1_accuracy:.3f}%"
     )
     print(
@@ -1622,11 +1634,11 @@ def main() -> None:
         f"{stage1_balanced:.3f}%"
     )
     print(
-        f"Stage 1 TRADE precision = "
+        f"Stage 1 HIGH-QUALITY TRADE precision = "
         f"{stage1_precision:.3f}%"
     )
     print(
-        f"Stage 1 TRADE recall = "
+        f"Stage 1 HIGH-QUALITY TRADE recall = "
         f"{stage1_recall:.3f}%"
     )
     print(
