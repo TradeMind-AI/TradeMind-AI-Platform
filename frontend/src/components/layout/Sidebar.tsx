@@ -78,6 +78,11 @@ const Sidebar = () => {
           label="Risk"
           to="/dashboard/risk"
         />
+
+        <SidebarItem
+          label="Forward Validation"
+          to="/dashboard/forward-validation"
+        />
       </nav>
 
       <div className="mt-10 rounded-xl border border-white/5 bg-white/[0.02] p-4">
