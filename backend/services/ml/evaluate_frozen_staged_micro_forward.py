@@ -410,10 +410,15 @@ def main() -> None:
         ]
     )
 
-    all_times = (
-        df["timestamp"]
-        .astype("int64")
-        .to_numpy()
+    # Convert explicitly to nanoseconds. Using astype("int64")
+    # can depend on the datetime resolution used by the installed
+    # pandas version, while Timestamp.value is always nanoseconds.
+    all_times = np.array(
+        [
+            pd.Timestamp(value).value
+            for value in df["timestamp"]
+        ],
+        dtype=np.int64,
     )
 
     all_prices = (
@@ -447,11 +452,20 @@ def main() -> None:
             )
         )
 
+        target_end_ns = (
+            timestamp_ns
+            + horizon_ns
+        )
+
+        # Forward evaluation must only score rows for which the
+        # full 60-second future horizon has actually elapsed.
+        if all_times[-1] < target_end_ns:
+            continue
+
         end_index = int(
             np.searchsorted(
                 all_times,
-                timestamp_ns
-                + horizon_ns,
+                target_end_ns,
                 side="right",
             )
         )
@@ -628,10 +642,33 @@ def main() -> None:
         )
 
     if not rows:
+        latest_timestamp = (
+            df["timestamp"].max()
+        )
+
         print(
             "Post-freeze snapshots exist, but "
             "none have a complete 60-second "
             "future path yet."
+        )
+
+        print(
+            f"Frozen at: {frozen_at}"
+        )
+
+        print(
+            f"Latest snapshot: {latest_timestamp}"
+        )
+
+        print(
+            f"Post-freeze raw snapshots: {total_new_raw:,}"
+        )
+
+        print(
+            "If the latest snapshot is more than "
+            "60 seconds after the freeze time, "
+            "the learner is producing data and "
+            "the evaluator should be checked."
         )
         return
 
