@@ -1253,7 +1253,58 @@ def append_csv(
         exist_ok=True,
     )
 
+    fieldnames = list(
+        row.keys()
+    )
+
     exists = path.exists()
+
+    # Research logs evolve as new diagnostics are added.
+    # A CSV created by an older version can therefore
+    # have fewer columns than today's snapshot. Appending
+    # a wider row under the old header makes pandas treat
+    # the file as malformed and the API then reports
+    # latest=None. Preserve the old evidence and start a
+    # clean schema-compatible file instead.
+    if exists:
+        try:
+            with path.open(
+                "r",
+                encoding="utf-8",
+                newline="",
+            ) as existing_handle:
+                reader = csv.reader(
+                    existing_handle
+                )
+                existing_header = next(
+                    reader,
+                    [],
+                )
+
+            if existing_header != fieldnames:
+                stamp = utc_now().strftime(
+                    "%Y%m%dT%H%M%SZ"
+                )
+
+                archive = path.with_name(
+                    path.stem
+                    + "_legacy_"
+                    + stamp
+                    + path.suffix
+                )
+
+                path.replace(
+                    archive
+                )
+
+                print(
+                    "Archived old CSV schema: "
+                    f"{archive.name}"
+                )
+
+                exists = False
+        except OSError:
+            exists = path.exists()
 
     with path.open(
         "a",
@@ -1262,9 +1313,7 @@ def append_csv(
     ) as handle:
         writer = csv.DictWriter(
             handle,
-            fieldnames=list(
-                row.keys()
-            ),
+            fieldnames=fieldnames,
         )
 
         if not exists:
