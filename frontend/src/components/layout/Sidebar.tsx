@@ -19,8 +19,8 @@ const SidebarItem = ({
       className={({ isActive }) => [
         'block w-full rounded-lg px-4 py-3 text-left text-sm transition',
         isActive
-          ? 'bg-white/10 text-white'
-          : 'text-white/40 hover:bg-white/[0.04] hover:text-white',
+          ? 'border border-[#d4af37]/25 bg-[#d4af37]/10 text-[#f0cf68] shadow-[inset_3px_0_0_#d4af37]'
+          : 'border border-transparent text-white/40 hover:border-[#d4af37]/10 hover:bg-[#d4af37]/[0.04] hover:text-[#e7d8ad]',
       ].join(' ')}
     >
       {label}
@@ -31,13 +31,13 @@ const SidebarItem = ({
 
 const Sidebar = () => {
   return (
-    <aside className="hidden min-h-screen w-64 border-r border-white/5 bg-[#050914] px-5 py-6 lg:block">
+    <aside className="hidden min-h-screen w-64 border-r border-[#d4af37]/10 bg-[#050505] px-5 py-6 lg:block">
       <NavLink
         to="/"
         className="flex items-center gap-3 px-2"
       >
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/5">
-          <span className="font-semibold">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-[#d4af37]/35 bg-[#d4af37]/[0.06] shadow-[0_0_24px_rgba(212,175,55,0.08)]">
+          <span className="font-semibold text-[#f0cf68]">
             T
           </span>
         </div>
@@ -47,7 +47,7 @@ const Sidebar = () => {
             TradeMind AI
           </p>
 
-          <p className="text-xs text-white/30">
+          <p className="text-xs text-[#9d8650]">
             Trading Intelligence
           </p>
         </div>
@@ -85,7 +85,7 @@ const Sidebar = () => {
         />
       </nav>
 
-      <div className="mt-10 rounded-xl border border-white/5 bg-white/[0.02] p-4">
+      <div className="mt-10 rounded-xl border border-[#d4af37]/15 bg-[#d4af37]/[0.025] p-4">
         <p className="text-xs uppercase tracking-[0.2em] text-white/20">
           Mode
         </p>
