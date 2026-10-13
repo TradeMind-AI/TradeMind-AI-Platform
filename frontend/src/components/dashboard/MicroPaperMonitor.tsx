@@ -126,18 +126,26 @@ const MicroPaperMonitor = () => {
           </p>
         </div>
 
-        <span
-          className={[
-            'rounded-md border px-2.5 py-1 text-[10px] uppercase tracking-wider',
-            status?.running
-              ? 'border-emerald-400/20 bg-emerald-400/[0.06] text-emerald-300'
-              : 'border-white/10 bg-white/[0.03] text-white/35',
-          ].join(' ')}
-        >
-          {status?.running
-            ? 'data live'
-            : 'waiting'}
-        </span>
+        <div className="text-right">
+          <span
+            className={[
+              'rounded-md border px-2.5 py-1 text-[10px] uppercase tracking-wider',
+              status?.running
+                ? 'border-emerald-400/20 bg-emerald-400/[0.06] text-emerald-300'
+                : 'border-amber-400/20 bg-amber-400/[0.06] text-amber-200',
+            ].join(' ')}
+          >
+            {status?.running
+              ? 'learner live'
+              : 'learner stopped / stale'}
+          </span>
+
+          {status?.heartbeatAgeSeconds != null && (
+            <p className="mt-2 text-[10px] text-white/25">
+              Last learner update {status.heartbeatAgeSeconds.toFixed(0)}s ago
+            </p>
+          )}
+        </div>
       </div>
 
       {error && (
@@ -148,6 +156,12 @@ const MicroPaperMonitor = () => {
 
       {status && (
         <>
+          {!status.running && (
+            <div className="mt-4 rounded-lg border border-amber-400/20 bg-amber-400/[0.05] px-4 py-3 text-xs leading-5 text-amber-100">
+              {status.message}
+            </div>
+          )}
+
           <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
             <div className="rounded-xl border border-white/8 bg-black/10 p-4">
               <p className="text-[10px] uppercase tracking-wider text-white/25">
@@ -194,6 +208,56 @@ const MicroPaperMonitor = () => {
               </p>
               <p className="mt-2 text-lg font-semibold">
                 {latest?.learningSamples ?? 0}
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="rounded-xl border border-white/8 bg-black/10 p-4">
+              <p className="text-[10px] uppercase tracking-wider text-white/25">
+                Forward accuracy
+              </p>
+              <p className="mt-2 text-lg font-semibold">
+                {pct(status.prequentialAccuracyPct, 1)}
+              </p>
+              <p className="mt-1 text-xs text-white/25">
+                Test-before-train
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-white/8 bg-black/10 p-4">
+              <p className="text-[10px] uppercase tracking-wider text-white/25">
+                Balanced accuracy
+              </p>
+              <p className="mt-2 text-lg font-semibold">
+                {pct(status.balancedAccuracyPct, 1)}
+              </p>
+              <p className="mt-1 text-xs text-white/25">
+                Class-bias check
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-white/8 bg-black/10 p-4">
+              <p className="text-[10px] uppercase tracking-wider text-white/25">
+                80% confidence accuracy
+              </p>
+              <p className="mt-2 text-lg font-semibold">
+                {pct(status.highConfidenceAccuracyPct, 1)}
+              </p>
+              <p className="mt-1 text-xs text-white/25">
+                High-confidence outcomes
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-white/8 bg-black/10 p-4">
+              <p className="text-[10px] uppercase tracking-wider text-white/25">
+                Evaluation samples
+              </p>
+              <p className="mt-2 text-lg font-semibold">
+                {status.evaluationSamples}
+              </p>
+              <p className="mt-1 text-xs text-white/25">
+                Forward-scored samples
               </p>
             </div>
           </div>
@@ -301,6 +365,19 @@ const MicroPaperMonitor = () => {
                       <span className="text-white/70">
                         {signalLabel(
                           latest.tradeDirection,
+                        )}
+                      </span>
+                    </div>
+
+                    <div className="mt-2 flex items-center justify-between gap-4">
+                      <span className="text-white/30">
+                        Adaptive entry gate
+                      </span>
+                      <span className="text-white/70">
+                        {pct(
+                          latest.effectiveEntryThreshold
+                          * 100,
+                          1,
                         )}
                       </span>
                     </div>
