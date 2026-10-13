@@ -933,6 +933,18 @@ def load_account() -> dict:
         "closed_trades": 0,
         "wins": 0,
         "losses": 0,
+        "trade_feedback": {
+            "LONG": {
+                "count": 0,
+                "wins": 0,
+                "net_return_sum": 0.0,
+            },
+            "SHORT": {
+                "count": 0,
+                "wins": 0,
+                "net_return_sum": 0.0,
+            },
+        },
     }
 
 
@@ -982,6 +994,104 @@ def append_csv(
         writer.writerow(
             row
         )
+
+
+def ensure_trade_feedback(
+    account: dict,
+) -> dict:
+    feedback = account.setdefault(
+        "trade_feedback",
+        {},
+    )
+
+    for side in [
+        "LONG",
+        "SHORT",
+    ]:
+        feedback.setdefault(
+            side,
+            {
+                "count": 0,
+                "wins": 0,
+                "net_return_sum": 0.0,
+            },
+        )
+
+    return feedback
+
+
+def adaptive_entry_threshold(
+    account: dict,
+    direction: int,
+) -> float:
+    feedback = ensure_trade_feedback(
+        account
+    )
+
+    side = (
+        "LONG"
+        if direction == 1
+        else "SHORT"
+    )
+
+    stats = feedback[side]
+    count = int(
+        stats.get(
+            "count",
+            0,
+        )
+    )
+
+    if count < 20:
+        return MODEL_ENTRY_CONFIDENCE
+
+    wins = int(
+        stats.get(
+            "wins",
+            0,
+        )
+    )
+
+    win_rate = wins / count
+    avg_net_return = (
+        float(
+            stats.get(
+                "net_return_sum",
+                0.0,
+            )
+        )
+        / count
+    )
+
+    penalty = 0.0
+
+    if win_rate < 0.50:
+        penalty += min(
+            0.10,
+            (
+                0.50
+                - win_rate
+            )
+            * 0.25,
+        )
+
+    if avg_net_return < 0:
+        penalty += min(
+            0.05,
+            abs(
+                avg_net_return
+            )
+            * 20.0,
+        )
+
+    return float(
+        np.clip(
+            MODEL_ENTRY_CONFIDENCE
+            + penalty,
+            MODEL_ENTRY_CONFIDENCE,
+            0.75,
+        )
+    )
 
 
 def close_position(
@@ -1106,6 +1216,44 @@ def close_position(
                 ),
         },
     )
+
+    feedback = ensure_trade_feedback(
+        account
+    )
+
+    side_key = (
+        "LONG"
+        if direction == 1
+        else "SHORT"
+    )
+
+    side_stats = feedback[
+        side_key
+    ]
+
+    side_stats["count"] = int(
+        side_stats.get(
+            "count",
+            0,
+        )
+    ) + 1
+
+    if pnl > 0:
+        side_stats["wins"] = int(
+            side_stats.get(
+                "wins",
+                0,
+            )
+        ) + 1
+
+    side_stats[
+        "net_return_sum"
+    ] = float(
+        side_stats.get(
+            "net_return_sum",
+            0.0,
+        )
+    ) + net_return
 
     account["position"] = None
 
@@ -1731,11 +1879,20 @@ def main() -> None:
             source = "MODEL"
             trade_direction = 0
 
+            effective_entry_threshold = (
+                adaptive_entry_threshold(
+                    account,
+                    prediction,
+                )
+                if prediction != 0
+                else MODEL_ENTRY_CONFIDENCE
+            )
+
             if (
                 model.samples
                 >= MIN_TRAINED_SAMPLES
                 and confidence
-                >= MODEL_ENTRY_CONFIDENCE
+                >= effective_entry_threshold
                 and prediction != 0
             ):
                 trade_direction = (
@@ -1802,6 +1959,8 @@ def main() -> None:
                     trade_direction,
                 "decision_source":
                     source,
+                "effective_entry_threshold":
+                    effective_entry_threshold,
                 "learning_samples":
                     model.samples,
                 "equity_usdt":
@@ -1877,6 +2036,7 @@ def main() -> None:
                 f"samples={model.samples} "
                 f"pred={prediction:+d} "
                 f"conf={confidence:.3f} "
+                f"gate={effective_entry_threshold:.3f} "
                 f"preq_acc={model_accuracy * 100:.1f}% "
                 f"bal_acc={balanced_accuracy * 100:.1f}% "
                 f"80conf_acc={high_conf_accuracy * 100:.1f}% "
