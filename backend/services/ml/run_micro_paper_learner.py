@@ -37,6 +37,13 @@ MODEL_FILE = (
     / "micro_online_paper_model.joblib"
 )
 
+TRADE_SELECTOR_FILE = (
+    PROJECT_ROOT
+    / "backend"
+    / "models"
+    / "micro_trade_selector.joblib"
+)
+
 ACCOUNT_FILE = (
     OUTPUT_DIR
     / "account.json"
@@ -55,6 +62,11 @@ LEARNING_LOG = (
 FEATURE_LOG = (
     OUTPUT_DIR
     / "feature_snapshots.csv"
+)
+
+TRADE_OUTCOME_LOG = (
+    OUTPUT_DIR
+    / "trade_outcome_learning.csv"
 )
 
 EVALUATION_LOG = (
@@ -85,8 +97,11 @@ STOP_LOSS_PCT = 0.0012
 MAX_HOLD_SECONDS = 60
 
 MODEL_ENTRY_CONFIDENCE = 0.55
-EXPLORATION_RATE = 0.15
+EXPLORATION_RATE = 0.05
 MIN_TRAINED_SAMPLES = 100
+
+TRADE_SELECTOR_MIN_SAMPLES = 50
+TRADE_SELECTOR_THRESHOLD = 0.55
 
 CLASSES = np.array(
     [-1, 0, 1],
@@ -861,6 +876,263 @@ class OnlineModel:
         )
 
 
+class TradeOutcomeSelector:
+    """
+    Online meta-model that learns whether a proposed
+    paper trade is likely to finish net-profitable.
+
+    It is intentionally separate from the direction
+    predictor. The direction model learns market
+    movement; this model learns execution quality from
+    completed good and bad paper trades.
+    """
+
+    def __init__(
+        self,
+    ) -> None:
+        self.scaler = StandardScaler()
+        self.model = SGDClassifier(
+            loss="log_loss",
+            alpha=0.001,
+            penalty="l2",
+            average=True,
+            random_state=84,
+        )
+        self.scaler_ready = False
+        self.model_ready = False
+        self.samples = 0
+        self.profitable = 0
+        self.unprofitable = 0
+
+        if TRADE_SELECTOR_FILE.exists():
+            try:
+                saved = joblib.load(
+                    TRADE_SELECTOR_FILE
+                )
+                self.scaler = saved["scaler"]
+                self.model = saved["model"]
+                self.scaler_ready = bool(
+                    saved.get(
+                        "scaler_ready",
+                        False,
+                    )
+                )
+                self.model_ready = bool(
+                    saved.get(
+                        "model_ready",
+                        False,
+                    )
+                )
+                self.samples = int(
+                    saved.get(
+                        "samples",
+                        0,
+                    )
+                )
+                self.profitable = int(
+                    saved.get(
+                        "profitable",
+                        0,
+                    )
+                )
+                self.unprofitable = int(
+                    saved.get(
+                        "unprofitable",
+                        0,
+                    )
+                )
+            except Exception:
+                pass
+
+    def predict(
+        self,
+        features: np.ndarray,
+    ) -> float:
+        if (
+            not self.scaler_ready
+            or not self.model_ready
+        ):
+            return 0.5
+
+        X = self.scaler.transform(
+            features.reshape(
+                1,
+                -1,
+            )
+        )
+
+        probabilities = (
+            self.model.predict_proba(
+                X
+            )[0]
+        )
+
+        class_map = {
+            int(label): float(prob)
+            for label, prob in zip(
+                self.model.classes_,
+                probabilities,
+            )
+        }
+
+        return float(
+            class_map.get(
+                1,
+                0.5,
+            )
+        )
+
+    def update(
+        self,
+        features: np.ndarray,
+        profitable: bool,
+        net_return: float,
+    ) -> None:
+        X = features.reshape(
+            1,
+            -1,
+        )
+
+        self.scaler.partial_fit(
+            X
+        )
+        self.scaler_ready = True
+
+        transformed = (
+            self.scaler.transform(
+                X
+            )
+        )
+
+        label = int(
+            profitable
+        )
+
+        # Larger wins/losses carry somewhat more
+        # information, but cap the influence so one
+        # extreme trade cannot dominate the learner.
+        magnitude_weight = float(
+            np.clip(
+                1.0
+                + abs(
+                    net_return
+                )
+                / 0.001,
+                1.0,
+                4.0,
+            )
+        )
+
+        if not self.model_ready:
+            self.model.partial_fit(
+                transformed,
+                np.array(
+                    [label]
+                ),
+                classes=np.array(
+                    [0, 1],
+                    dtype=int,
+                ),
+                sample_weight=np.array(
+                    [magnitude_weight]
+                ),
+            )
+            self.model_ready = True
+        else:
+            self.model.partial_fit(
+                transformed,
+                np.array(
+                    [label]
+                ),
+                sample_weight=np.array(
+                    [magnitude_weight]
+                ),
+            )
+
+        self.samples += 1
+
+        if profitable:
+            self.profitable += 1
+        else:
+            self.unprofitable += 1
+
+        self.save()
+
+    def save(
+        self,
+    ) -> None:
+        TRADE_SELECTOR_FILE.parent.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        joblib.dump(
+            {
+                "scaler":
+                    self.scaler,
+                "model":
+                    self.model,
+                "scaler_ready":
+                    self.scaler_ready,
+                "model_ready":
+                    self.model_ready,
+                "samples":
+                    self.samples,
+                "profitable":
+                    self.profitable,
+                "unprofitable":
+                    self.unprofitable,
+            },
+            TRADE_SELECTOR_FILE,
+        )
+
+
+def build_trade_selector_features(
+    market_features: np.ndarray,
+    direction: int,
+    confidence: float,
+    probabilities: dict[int, float],
+    entry_threshold: float,
+) -> np.ndarray:
+    extras = np.array(
+        [
+            float(direction),
+            float(confidence),
+            float(
+                probabilities.get(
+                    -1,
+                    0.0,
+                )
+            ),
+            float(
+                probabilities.get(
+                    0,
+                    0.0,
+                )
+            ),
+            float(
+                probabilities.get(
+                    1,
+                    0.0,
+                )
+            ),
+            float(
+                entry_threshold
+            ),
+        ],
+        dtype=np.float64,
+    )
+
+    return np.concatenate(
+        [
+            market_features.astype(
+                np.float64
+            ),
+            extras,
+        ]
+    )
+
+
 def heuristic_direction(
     values: dict[str, float],
 ) -> int:
@@ -1098,6 +1370,8 @@ def close_position(
     account: dict,
     price: float,
     reason: str,
+    trade_selector:
+        TradeOutcomeSelector,
 ) -> None:
     position = account.get(
         "position"
@@ -1255,6 +1529,59 @@ def close_position(
         )
     ) + net_return
 
+    selector_values = position.get(
+        "trade_selector_features"
+    )
+
+    if selector_values:
+        selector_features = np.array(
+            selector_values,
+            dtype=np.float64,
+        )
+
+        trade_selector.update(
+            selector_features,
+            pnl > 0,
+            net_return,
+        )
+
+        append_csv(
+            TRADE_OUTCOME_LOG,
+            {
+                "timestamp":
+                    utc_now_iso(),
+                "side":
+                    side_key,
+                "entry_price":
+                    entry_price,
+                "exit_price":
+                    price,
+                "net_return_pct":
+                    net_return
+                    * 100.0,
+                "pnl_usdt":
+                    pnl,
+                "profitable":
+                    int(
+                        pnl > 0
+                    ),
+                "selector_probability":
+                    position.get(
+                        "selector_probability",
+                        0.5,
+                    ),
+                "selector_samples_before":
+                    position.get(
+                        "selector_samples",
+                        0,
+                    ),
+                "selector_samples_after":
+                    trade_selector.samples,
+                "reason":
+                    reason,
+            },
+        )
+
     account["position"] = None
 
 
@@ -1262,6 +1589,8 @@ def maybe_manage_position(
     account: dict,
     price: float,
     direction: int,
+    trade_selector:
+        TradeOutcomeSelector,
 ) -> None:
     position = account.get(
         "position"
@@ -1303,6 +1632,7 @@ def maybe_manage_position(
             account,
             price,
             "TAKE_PROFIT",
+            trade_selector,
         )
     elif gross_return <= (
         -STOP_LOSS_PCT
@@ -1311,6 +1641,7 @@ def maybe_manage_position(
             account,
             price,
             "STOP_LOSS",
+            trade_selector,
         )
     elif (
         direction != 0
@@ -1321,6 +1652,7 @@ def maybe_manage_position(
             account,
             price,
             "MODEL_REVERSAL",
+            trade_selector,
         )
     elif held_seconds >= (
         MAX_HOLD_SECONDS
@@ -1329,6 +1661,7 @@ def maybe_manage_position(
             account,
             price,
             "MAX_HOLD",
+            trade_selector,
         )
 
 
@@ -1339,6 +1672,10 @@ def maybe_open_position(
     confidence: float,
     samples: int,
     source: str,
+    trade_selector_features:
+        np.ndarray,
+    selector_probability: float,
+    selector_samples: int,
 ) -> None:
     if (
         account.get(
@@ -1373,6 +1710,12 @@ def maybe_open_position(
             samples,
         "decision_source":
             source,
+        "trade_selector_features":
+            trade_selector_features.tolist(),
+        "selector_probability":
+            selector_probability,
+        "selector_samples":
+            selector_samples,
     }
 
     append_csv(
@@ -1703,6 +2046,7 @@ def main() -> None:
     )
 
     model = OnlineModel()
+    trade_selector = TradeOutcomeSelector()
     account = load_account()
     evaluation = load_evaluation()
 
@@ -1888,19 +2232,58 @@ def main() -> None:
                 else MODEL_ENTRY_CONFIDENCE
             )
 
+            proposed_direction = (
+                prediction
+                if prediction != 0
+                else heuristic
+            )
+
+            selector_features = (
+                build_trade_selector_features(
+                    features,
+                    proposed_direction,
+                    confidence,
+                    probabilities,
+                    effective_entry_threshold,
+                )
+            )
+
+            selector_probability = (
+                trade_selector.predict(
+                    selector_features
+                )
+            )
+
+            selector_ready = (
+                trade_selector.samples
+                >= TRADE_SELECTOR_MIN_SAMPLES
+            )
+
+            selector_allows = (
+                not selector_ready
+                or selector_probability
+                >= TRADE_SELECTOR_THRESHOLD
+            )
+
             if (
                 model.samples
                 >= MIN_TRAINED_SAMPLES
                 and confidence
                 >= effective_entry_threshold
                 and prediction != 0
+                and selector_allows
             ):
                 trade_direction = (
                     prediction
                 )
+                source = "MODEL+TRADE_SELECTOR"
             else:
                 source = "EXPLORATION"
 
+                # Small exploration rate is retained so
+                # the selector keeps receiving examples
+                # from market conditions it would
+                # otherwise reject completely.
                 if (
                     heuristic != 0
                     and random.random()
@@ -1914,6 +2297,7 @@ def main() -> None:
                 account,
                 price,
                 trade_direction,
+                trade_selector,
             )
 
             maybe_open_position(
@@ -1923,6 +2307,9 @@ def main() -> None:
                 confidence,
                 model.samples,
                 source,
+                selector_features,
+                selector_probability,
+                trade_selector.samples,
             )
 
             save_account(
@@ -1961,6 +2348,14 @@ def main() -> None:
                     source,
                 "effective_entry_threshold":
                     effective_entry_threshold,
+                "trade_selector_probability":
+                    selector_probability,
+                "trade_selector_samples":
+                    trade_selector.samples,
+                "trade_selector_ready":
+                    int(
+                        selector_ready
+                    ),
                 "learning_samples":
                     model.samples,
                 "equity_usdt":
@@ -2037,6 +2432,8 @@ def main() -> None:
                 f"pred={prediction:+d} "
                 f"conf={confidence:.3f} "
                 f"gate={effective_entry_threshold:.3f} "
+                f"trade_p={selector_probability:.3f} "
+                f"trade_n={trade_selector.samples} "
                 f"preq_acc={model_accuracy * 100:.1f}% "
                 f"bal_acc={balanced_accuracy * 100:.1f}% "
                 f"80conf_acc={high_conf_accuracy * 100:.1f}% "
