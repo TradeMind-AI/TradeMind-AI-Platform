@@ -1,3 +1,5 @@
+import { Link } from 'react-router-dom'
+
 const Landing = () => {
   return (
     <main className="min-h-screen bg-[#030712] text-white">
@@ -71,9 +73,12 @@ const Landing = () => {
               Start Paper Trading
             </button>
 
-            <button className="rounded-xl border border-white/10 bg-white/[0.03] px-7 py-3.5 text-sm font-medium text-white transition hover:bg-white/[0.07]">
+            <Link
+              to="/dashboard"
+              className="rounded-xl border border-white/10 bg-white/[0.03] px-7 py-3.5 text-sm font-medium text-white transition hover:bg-white/[0.07]"
+            >
               Explore the Platform
-            </button>
+            </Link>
           </div>
 
           {/* Trust statement */}
