@@ -203,9 +203,10 @@ def handle_spot(
     data: dict[str, Any],
 ) -> None:
     received = utc_now_iso()
+    stream_lower = stream.lower()
 
-    if stream.endswith(
-        "@aggTrade"
+    if stream_lower.endswith(
+        "@aggtrade"
     ):
         append_row(
             "spot_agg_trade",
@@ -232,8 +233,8 @@ def handle_spot(
         )
         return
 
-    if stream.endswith(
-        "@bookTicker"
+    if stream_lower.endswith(
+        "@bookticker"
     ):
         append_row(
             "spot_book_ticker",
@@ -254,7 +255,7 @@ def handle_spot(
         )
         return
 
-    if "@depth20" in stream:
+    if "@depth20" in stream_lower:
         append_row(
             "spot_depth20",
             {
@@ -286,9 +287,10 @@ def handle_futures(
     data: dict[str, Any],
 ) -> None:
     received = utc_now_iso()
+    stream_lower = stream.lower()
 
-    if stream.endswith(
-        "@aggTrade"
+    if stream_lower.endswith(
+        "@aggtrade"
     ):
         append_row(
             "futures_agg_trade",
@@ -315,8 +317,8 @@ def handle_futures(
         )
         return
 
-    if stream.endswith(
-        "@bookTicker"
+    if stream_lower.endswith(
+        "@bookticker"
     ):
         append_row(
             "futures_book_ticker",
@@ -341,7 +343,7 @@ def handle_futures(
         )
         return
 
-    if "@depth20" in stream:
+    if "@depth20" in stream_lower:
         append_row(
             "futures_depth20",
             {
@@ -369,7 +371,7 @@ def handle_futures(
         )
         return
 
-    if "@markPrice" in stream:
+    if "@markprice" in stream_lower:
         append_row(
             "futures_mark_price",
             {
@@ -391,8 +393,8 @@ def handle_futures(
         )
         return
 
-    if stream.endswith(
-        "@forceOrder"
+    if stream_lower.endswith(
+        "@forceorder"
     ):
         order = data.get(
             "o",
