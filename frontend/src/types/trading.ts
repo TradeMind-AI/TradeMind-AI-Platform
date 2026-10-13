@@ -144,6 +144,7 @@ export type MicroPaperLatest = {
   probUp: number
   learningSamples: number
   decisionSource: string
+  effectiveEntryThreshold: number
   tradeDirection: number
   spotDepthImbalance: number
   spotTradeFlowImbalance: number
@@ -168,6 +169,11 @@ export type MicroPaperPosition = {
 export type MicroPaperStatus = {
   running: boolean
   message: string
+  heartbeatAgeSeconds: number | null
+  prequentialAccuracyPct: number
+  balancedAccuracyPct: number
+  highConfidenceAccuracyPct: number
+  evaluationSamples: number
   equityUsdt: number
   realizedPnlUsdt: number
   closedTrades: number
