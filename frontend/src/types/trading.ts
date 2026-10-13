@@ -145,6 +145,9 @@ export type MicroPaperLatest = {
   learningSamples: number
   decisionSource: string
   effectiveEntryThreshold: number
+  tradeSelectorProbability: number
+  tradeSelectorSamples: number
+  tradeSelectorReady: boolean
   tradeDirection: number
   spotDepthImbalance: number
   spotTradeFlowImbalance: number
