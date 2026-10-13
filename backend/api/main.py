@@ -4,6 +4,7 @@ import joblib
 import pandas as pd
 import json
 import threading
+import time
 
 import requests
 from fastapi import FastAPI, HTTPException, Query
@@ -74,6 +75,9 @@ STAGED_FORWARD_MANIFEST_FILE = (
 MANUAL_PAPER_STARTING_USDT = 10000.0
 MANUAL_PAPER_FEE_RATE = 0.0005
 MANUAL_PAPER_LOCK = threading.Lock()
+STAGED_FORWARD_REFRESH_LOCK = threading.Lock()
+STAGED_FORWARD_LAST_REFRESH_ATTEMPT = 0.0
+STAGED_FORWARD_REFRESH_INTERVAL_SECONDS = 60.0
 
 
 class ManualPaperOrderRequest(BaseModel):
@@ -118,6 +122,75 @@ def safe_string(value, default=""):
 
 def display_timeframe(timeframe: str) -> str:
     return "1H" if timeframe == "1h" else timeframe
+
+
+def refresh_staged_forward_if_needed() -> None:
+    global STAGED_FORWARD_LAST_REFRESH_ATTEMPT
+
+    now = time.time()
+
+    if (
+        now
+        - STAGED_FORWARD_LAST_REFRESH_ATTEMPT
+        < STAGED_FORWARD_REFRESH_INTERVAL_SECONDS
+    ):
+        return
+
+    snapshot_files = list(
+        MICRO_PAPER_DIR.glob(
+            "feature_snapshots*.csv"
+        )
+    )
+
+    if not snapshot_files:
+        return
+
+    latest_snapshot_mtime = max(
+        path.stat().st_mtime
+        for path in snapshot_files
+    )
+
+    evaluation_mtime = (
+        STAGED_FORWARD_EVALUATION_FILE
+        .stat()
+        .st_mtime
+        if STAGED_FORWARD_EVALUATION_FILE.exists()
+        else 0.0
+    )
+
+    if (
+        evaluation_mtime
+        >= latest_snapshot_mtime
+    ):
+        return
+
+    if not STAGED_FORWARD_REFRESH_LOCK.acquire(
+        blocking=False,
+    ):
+        return
+
+    STAGED_FORWARD_LAST_REFRESH_ATTEMPT = now
+
+    def run_refresh() -> None:
+        try:
+            from backend.services.ml.evaluate_frozen_staged_micro_forward import (
+                main as evaluate_staged_forward,
+            )
+
+            evaluate_staged_forward()
+        except Exception as exc:
+            print(
+                "Automatic staged forward "
+                f"evaluation failed: {exc}"
+            )
+        finally:
+            STAGED_FORWARD_REFRESH_LOCK.release()
+
+    threading.Thread(
+        target=run_refresh,
+        daemon=True,
+        name="staged-forward-refresh",
+    ).start()
 
 
 def manual_paper_default_state() -> dict:
@@ -294,6 +367,8 @@ def get_timeframes():
 
 @app.get("/api/research/staged-forward")
 def get_staged_forward_research():
+    refresh_staged_forward_if_needed()
+
     evaluation = {}
     manifest = {}
 
