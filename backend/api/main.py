@@ -1298,6 +1298,30 @@ def get_micro_paper_status():
                                 "effective_entry_threshold"
                             )
                         ),
+                    "tradeSelectorProbability":
+                        safe_float(
+                            row.get(
+                                "trade_selector_probability"
+                            )
+                        ),
+                    "tradeSelectorSamples":
+                        int(
+                            safe_float(
+                                row.get(
+                                    "trade_selector_samples"
+                                )
+                            )
+                        ),
+                    "tradeSelectorReady":
+                        bool(
+                            int(
+                                safe_float(
+                                    row.get(
+                                        "trade_selector_ready"
+                                    )
+                                )
+                            )
+                        ),
                     "tradeDirection":
                         int(
                             safe_float(
