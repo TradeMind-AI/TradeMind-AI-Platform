@@ -332,7 +332,7 @@ const Dashboard = () => {
 
 
   return (
-    <div className="min-h-screen bg-[#030712] text-white">
+    <div className="min-h-screen bg-[#050505] text-[#f6f0df]">
       <div className="flex">
         <Sidebar />
 
@@ -355,7 +355,7 @@ const Dashboard = () => {
           <main className="px-6 py-8 lg:px-8">
             <div className="mx-auto max-w-7xl">
               <div>
-                <p className="text-xs uppercase tracking-[0.2em] text-white/30">
+                <p className="text-xs uppercase tracking-[0.2em] text-[#a98c45]">
                   Overview
                 </p>
 
@@ -408,8 +408,8 @@ const Dashboard = () => {
                           className={[
                             'rounded-lg border px-4 py-2 text-sm transition',
                             active
-                              ? 'border-white/30 bg-white text-black'
-                              : 'border-white/10 bg-white/[0.03] text-white/60 hover:bg-white/[0.07] hover:text-white',
+                              ? 'border-[#d4af37]/50 bg-[linear-gradient(135deg,#f0cf68,#d4af37)] text-black shadow-[0_8px_24px_rgba(212,175,55,0.12)]'
+                              : 'border-[#d4af37]/15 bg-[#d4af37]/[0.025] text-white/60 hover:border-[#d4af37]/30 hover:bg-[#d4af37]/[0.06] hover:text-[#f0cf68]',
                           ].join(' ')}
                         >
                           {timeframe}
