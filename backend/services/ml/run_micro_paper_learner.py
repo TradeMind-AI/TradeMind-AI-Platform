@@ -94,6 +94,13 @@ POSITION_FRACTION = 0.05
 FEE_RATE = 0.0005
 TAKE_PROFIT_PCT = 0.0020
 STOP_LOSS_PCT = 0.0012
+
+# Trailing stop activates only after the trade first
+# moves in our favour. It then follows the best price
+# seen and exits if price gives back too much.
+TRAILING_STOP_ACTIVATION_PCT = 0.0010
+TRAILING_STOP_DISTANCE_PCT = 0.0008
+
 MAX_HOLD_SECONDS = 60
 
 MODEL_ENTRY_CONFIDENCE = 0.55
@@ -1614,6 +1621,99 @@ def maybe_manage_position(
         * position_direction
     )
 
+    best_price = float(
+        position.get(
+            "best_price",
+            entry_price,
+        )
+    )
+
+    trailing_active = bool(
+        position.get(
+            "trailing_active",
+            False,
+        )
+    )
+
+    if position_direction == 1:
+        best_price = max(
+            best_price,
+            price,
+        )
+
+        best_return = (
+            best_price / entry_price
+            - 1.0
+        )
+
+        if (
+            not trailing_active
+            and best_return
+            >= TRAILING_STOP_ACTIVATION_PCT
+        ):
+            trailing_active = True
+
+        trailing_stop_price = (
+            best_price
+            * (
+                1.0
+                - TRAILING_STOP_DISTANCE_PCT
+            )
+            if trailing_active
+            else 0.0
+        )
+
+        trailing_hit = (
+            trailing_active
+            and price
+            <= trailing_stop_price
+        )
+    else:
+        best_price = min(
+            best_price,
+            price,
+        )
+
+        best_return = (
+            entry_price / best_price
+            - 1.0
+            if best_price > 0
+            else 0.0
+        )
+
+        if (
+            not trailing_active
+            and best_return
+            >= TRAILING_STOP_ACTIVATION_PCT
+        ):
+            trailing_active = True
+
+        trailing_stop_price = (
+            best_price
+            * (
+                1.0
+                + TRAILING_STOP_DISTANCE_PCT
+            )
+            if trailing_active
+            else 0.0
+        )
+
+        trailing_hit = (
+            trailing_active
+            and price
+            >= trailing_stop_price
+        )
+
+    position["best_price"] = (
+        best_price
+    )
+    position["trailing_active"] = (
+        trailing_active
+    )
+    position["trailing_stop_price"] = (
+        trailing_stop_price
+    )
+
     opened_at = datetime.fromisoformat(
         position[
             "opened_at"
@@ -1641,6 +1741,13 @@ def maybe_manage_position(
             account,
             price,
             "STOP_LOSS",
+            trade_selector,
+        )
+    elif trailing_hit:
+        close_position(
+            account,
+            price,
+            "TRAILING_STOP",
             trade_selector,
         )
     elif (
@@ -1710,6 +1817,12 @@ def maybe_open_position(
             samples,
         "decision_source":
             source,
+        "best_price":
+            price,
+        "trailing_active":
+            False,
+        "trailing_stop_price":
+            0.0,
         "trade_selector_features":
             trade_selector_features.tolist(),
         "selector_probability":
