@@ -22,6 +22,9 @@ import ModelPage
 import RiskPage
   from './pages/Risk/Risk'
 
+import ForwardValidationPage
+  from './pages/ForwardValidation/ForwardValidation'
+
 
 function App() {
   return (
@@ -55,6 +58,11 @@ function App() {
         <Route
           path="/dashboard/risk"
           element={<RiskPage />}
+        />
+
+        <Route
+          path="/dashboard/forward-validation"
+          element={<ForwardValidationPage />}
         />
       </Routes>
     </BrowserRouter>
