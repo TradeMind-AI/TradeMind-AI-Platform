@@ -213,3 +213,23 @@ export type StagedForwardResearch = {
   verdictNote: string
   evidenceStatus: string
 }
+
+
+export type TenMinuteForwardCandidateMetrics = {
+  available: boolean
+  decisions: number
+  closedTrades: number
+  winRatePct: number
+  netReturnPct: number
+  latestSignalTime: string
+  latestSignal: TradingSignal | 'SKIP_FILTER'
+}
+
+export type TenMinuteV2Comparison = {
+  researchOnly: boolean
+  candidateName: string
+  rule: string
+  v1: TenMinuteForwardCandidateMetrics
+  v2: TenMinuteForwardCandidateMetrics
+  note: string
+}
