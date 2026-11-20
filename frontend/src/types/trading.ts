@@ -1,6 +1,33 @@
-export type TradingSignal = 'BUY' | 'SELL' | 'HOLD'
+export type TradingSignal =
+  | 'BUY'
+  | 'SELL'
+  | 'HOLD'
+  | 'SKIP_OVERLAP'
 
-export type Prediction = 'UP' | 'DOWN' | 'NEUTRAL'
+export type Prediction =
+  'UP' | 'DOWN' | 'NEUTRAL'
+
+export type StrategyTimeframe =
+  | '1m'
+  | '2m'
+  | '5m'
+  | '10m'
+  | '20m'
+  | '30m'
+  | '1h'
+
+export type ChartTimeframe =
+  | '1m'
+  | '2m'
+  | '3m'
+  | '5m'
+  | '10m'
+  | '15m'
+  | '20m'
+  | '30m'
+  | '1h'
+  | '4h'
+  | '1d'
 
 export type ProbabilitySet = {
   down: number
@@ -19,6 +46,7 @@ export type RecentSignal = {
 export type TradingDashboardData = {
   symbol: string
   timeframe: string
+  timeframeKey: StrategyTimeframe
   price: number
   prediction: Prediction
   confidence: number
@@ -33,4 +61,155 @@ export type TradingDashboardData = {
   latestCandle: string
   systemStatus: string
   recentSignals: RecentSignal[]
+  strategyMode: string
+  researchStatus: string
+  forecastHorizonMinutes: number
+  targetThresholdPct: number
+  entryModel: string
+  exitModel: string
+  primaryCostPct: number
+  stressCostPct: number
+  forwardSignalCount: number
+  closedForwardTrades: number
+  evidenceNote: string
+}
+
+export type TimeframeStatus = {
+  timeframe: StrategyTimeframe
+  label: string
+  marketReady: boolean
+  featuresReady: boolean
+  modelReady: boolean
+  paperLogReady: boolean
+  tradingReady: boolean
+}
+
+
+export type AIIndicatorPoint = {
+  time: number
+  score: number
+  up: number
+  neutral: number
+  down: number
+  confidence: number
+  prediction: Prediction
+  signal: TradingSignal
+}
+
+
+export type ManualPaperOrder = {
+  timestamp: string
+  side: 'BUY' | 'SELL'
+  price: number
+  amountUsdt: number
+  btcQuantity: number
+  feeUsdt: number
+  realizedPnlUsdt: number
+}
+
+export type ManualPaperAccount = {
+  cashUsdt: number
+  btcQuantity: number
+  averageEntryPrice: number
+  btcMarketValueUsdt: number
+  equityUsdt: number
+  realizedPnlUsdt: number
+  unrealizedPnlUsdt: number
+  livePrice: number
+  feeRatePct: number
+  recentOrders: ManualPaperOrder[]
+}
+
+
+export type MicroPaperTrade = {
+  timestamp: string
+  event: string
+  side: string
+  entryPrice: number
+  exitPrice: number
+  notionalUsdt: number
+  netReturnPct: number
+  pnlUsdt: number
+  reason: string
+  modelConfidence: number
+}
+
+export type MicroPaperLatest = {
+  timestamp: string
+  price: number
+  prediction: number
+  confidence: number
+  probDown: number
+  probNeutral: number
+  probUp: number
+  learningSamples: number
+  decisionSource: string
+  effectiveEntryThreshold: number
+  tradeSelectorProbability: number
+  tradeSelectorSamples: number
+  tradeSelectorReady: boolean
+  tradeDirection: number
+  spotDepthImbalance: number
+  spotTradeFlowImbalance: number
+  spotVelocityBps: number
+  futuresDepthImbalance: number
+  futuresTradeFlowImbalance: number
+  futuresVelocityBps: number
+  fundingRate: number
+  openInterestChangePct: number
+}
+
+export type MicroPaperPosition = {
+  direction: number
+  entry_price: number
+  notional_usdt: number
+  opened_at: string
+  model_confidence: number
+  learning_samples: number
+  decision_source: string
+}
+
+export type MicroPaperStatus = {
+  running: boolean
+  message: string
+  heartbeatAgeSeconds: number | null
+  prequentialAccuracyPct: number
+  balancedAccuracyPct: number
+  highConfidenceAccuracyPct: number
+  evaluationSamples: number
+  equityUsdt: number
+  realizedPnlUsdt: number
+  closedTrades: number
+  wins: number
+  losses: number
+  winRatePct: number
+  position: MicroPaperPosition | null
+  latest: MicroPaperLatest | null
+  recentTrades: MicroPaperTrade[]
+}
+
+
+export type StagedForwardResearch = {
+  available: boolean
+  frozenAt: string
+  modelName: string
+  researchOnly: boolean
+  minimumNetProfitPct: number
+  newSnapshots: number
+  evaluableForwardRows: number
+  selectedPredictions: number
+  coveragePct: number
+  qualifiedTradeRatePct: number | null
+  avgSelectedNetReturnPct: number | null
+  minimumCheckpoint: number
+  preferredCheckpoint: number
+  minimumCheckpointProgressPct: number
+  preferredCheckpointProgressPct: number
+  verdict:
+    | 'NOT_FROZEN'
+    | 'INSUFFICIENT_EVIDENCE'
+    | 'PROMISING'
+    | 'FAILING_SO_FAR'
+  verdictNote: string
+  evidenceStatus: string
 }

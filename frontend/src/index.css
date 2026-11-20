@@ -1,10 +1,37 @@
 @import "tailwindcss";
 
+:root {
+  color-scheme: dark;
+  --tm-black: #050505;
+  --tm-black-soft: #0a0a0a;
+  --tm-panel: #0d0d0d;
+  --tm-panel-raised: #11100d;
+  --tm-gold: #d4af37;
+  --tm-gold-bright: #f0cf68;
+  --tm-gold-soft: #b9932f;
+  --tm-cream: #f6f0df;
+  --tm-muted: #948d7b;
+  --tm-border: rgba(212, 175, 55, 0.16);
+  --tm-border-strong: rgba(212, 175, 55, 0.30);
+  --tm-glow: rgba(212, 175, 55, 0.12);
+}
+
+html {
+  background: var(--tm-black);
+}
+
 body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
-  background: #020617;
+  background:
+    radial-gradient(
+      circle at 72% 8%,
+      rgba(212, 175, 55, 0.055),
+      transparent 32rem
+    ),
+    #050505;
+  color: var(--tm-cream);
   font-family:
     Inter,
     system-ui,
@@ -12,8 +39,114 @@ body {
     BlinkMacSystemFont,
     "Segoe UI",
     sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
 
 * {
   box-sizing: border-box;
+}
+
+::selection {
+  background: rgba(212, 175, 55, 0.28);
+  color: #fff8df;
+}
+
+/* Premium black + gold surface system. These rules intentionally
+   restyle the existing Tailwind utility palette across the app so
+   all current pages inherit the same visual language. */
+[class*="bg-[#030712]"] {
+  background-color: #050505 !important;
+}
+
+[class*="bg-[#050914]"],
+[class*="bg-[#080d18]"] {
+  background-color: #090909 !important;
+}
+
+[class*="border-white/5"] {
+  border-color: rgba(212, 175, 55, 0.10) !important;
+}
+
+[class*="border-white/10"] {
+  border-color: rgba(212, 175, 55, 0.16) !important;
+}
+
+[class*="border-white/20"],
+[class*="border-white/30"] {
+  border-color: rgba(212, 175, 55, 0.28) !important;
+}
+
+[class*="bg-white/[0.02]"],
+[class*="bg-white/[0.025]"],
+[class*="bg-white/[0.03]"],
+[class*="bg-white/[0.04]"],
+[class*="bg-white/[0.05]"] {
+  background-color: rgba(212, 175, 55, 0.025) !important;
+}
+
+[class*="bg-white/[0.06]"],
+[class*="bg-white/[0.07]"],
+[class*="bg-white/5"],
+[class*="bg-white/10"] {
+  background-color: rgba(212, 175, 55, 0.055) !important;
+}
+
+[class~="bg-white"] {
+  background:
+    linear-gradient(
+      135deg,
+      #f3d77b,
+      #d4af37 58%,
+      #aa8123
+    ) !important;
+  color: #090806 !important;
+  box-shadow:
+    0 8px 28px rgba(212, 175, 55, 0.14);
+}
+
+[class*="text-white/20"],
+[class*="text-white/25"],
+[class*="text-white/30"] {
+  color: #746e60 !important;
+}
+
+[class*="text-white/35"],
+[class*="text-white/40"] {
+  color: #918978 !important;
+}
+
+[class*="text-white/45"],
+[class*="text-white/50"] {
+  color: #aaa18d !important;
+}
+
+[class*="text-white/60"],
+[class*="text-white/70"] {
+  color: #c8bea7 !important;
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid rgba(240, 207, 104, 0.75);
+  outline-offset: 3px;
+}
+
+.tm-gold-text {
+  color: var(--tm-gold-bright);
+}
+
+.tm-gold-border {
+  border-color: var(--tm-border-strong);
+}
+
+.tm-gold-glow {
+  box-shadow:
+    0 0 0 1px rgba(212, 175, 55, 0.08),
+    0 18px 70px rgba(0, 0, 0, 0.38),
+    0 0 55px rgba(212, 175, 55, 0.045);
 }
