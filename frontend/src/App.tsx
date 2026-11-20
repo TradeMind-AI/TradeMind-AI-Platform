@@ -6,6 +6,7 @@ import {
 
 import Dashboard from './pages/Dashboard/Dashboard'
 import Landing from './pages/Landing/Landing'
+import Forex from './pages/Forex/Forex'
 
 function App() {
   return (
@@ -20,6 +21,7 @@ function App() {
           path="/dashboard"
           element={<Dashboard />}
         />
+        <Route path="/forex" element={<Forex />} />
       </Routes>
     </BrowserRouter>
   )
