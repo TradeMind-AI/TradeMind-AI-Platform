@@ -159,31 +159,39 @@ def tail_csv(
     path: Path,
     max_rows: int,
 ) -> list[dict[str, str]]:
-    if not path.exists():
+    if not path.exists() or max_rows <= 0:
         return []
 
-    with path.open(
-        "r",
-        encoding="utf-8",
-        newline="",
-    ) as handle:
+    # Read backwards in bounded chunks rather than scanning potentially
+    # gigabyte-sized market-data files on every five-second cycle.
+    with path.open("rb") as handle:
         header = handle.readline()
-
         if not header:
             return []
+        header_end = handle.tell()
+        handle.seek(0, 2)
+        position = handle.tell()
+        chunks: list[bytes] = []
+        newline_count = 0
+        while position > header_end and newline_count <= max_rows + 1:
+            size = min(65536, position - header_end)
+            position -= size
+            handle.seek(position)
+            chunk = handle.read(size)
+            chunks.append(chunk)
+            newline_count += chunk.count(b"\n")
 
-        lines = deque(
-            handle,
-            maxlen=max_rows,
-        )
-
+    lines = b"".join(reversed(chunks)).splitlines()
+    # The first fragment is incomplete if the scan stopped mid-line.
+    if position > header_end:
+        lines = lines[1:]
+    lines = lines[-max_rows:]
     if not lines:
         return []
 
     reader = csv.DictReader(
-        [header, *lines]
+        [header.decode("utf-8"), *(line.decode("utf-8") for line in lines)]
     )
-
     return list(reader)
 
 

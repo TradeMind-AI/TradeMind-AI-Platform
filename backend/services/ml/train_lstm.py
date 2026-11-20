@@ -1,4 +1,5 @@
 from pathlib import Path
+import os
 
 import numpy as np
 import pandas as pd
@@ -41,6 +42,18 @@ EPOCHS = 20
 LEARNING_RATE = 0.001
 
 RANDOM_SEED = 42
+
+# Use CUDA when available; set TRADEMIND_TORCH_DEVICE=cpu to compare CPU speed.
+_REQUESTED_DEVICE = os.getenv("TRADEMIND_TORCH_DEVICE", "auto").lower()
+if _REQUESTED_DEVICE not in {"auto", "cpu", "cuda"}:
+    raise ValueError("TRADEMIND_TORCH_DEVICE must be auto, cpu or cuda")
+if _REQUESTED_DEVICE == "cuda" and not torch.cuda.is_available():
+    raise RuntimeError("CUDA requested but unavailable in this Python environment")
+DEVICE = torch.device(
+    "cuda" if (_REQUESTED_DEVICE == "cuda" or
+               (_REQUESTED_DEVICE == "auto" and torch.cuda.is_available()))
+    else "cpu"
+)
 
 
 NON_FEATURE_COLUMNS = [
@@ -289,6 +302,7 @@ def train_model(
 
     criterion = nn.CrossEntropyLoss()
 
+    model = model.to(DEVICE)
     optimizer = torch.optim.Adam(
         model.parameters(),
         lr=LEARNING_RATE,
@@ -304,6 +318,8 @@ def train_model(
 
         for X_batch, y_batch in loader:
 
+            X_batch = X_batch.to(DEVICE, non_blocking=True)
+            y_batch = y_batch.to(DEVICE, non_blocking=True)
             optimizer.zero_grad()
 
             outputs = model(
@@ -356,6 +372,7 @@ def evaluate_model(
         shuffle=False,
     )
 
+    model = model.to(DEVICE)
     model.eval()
 
     predictions = []
@@ -364,6 +381,7 @@ def evaluate_model(
 
         for X_batch, _ in loader:
 
+            X_batch = X_batch.to(DEVICE, non_blocking=True)
             outputs = model(
                 X_batch
             )
@@ -542,6 +560,7 @@ def main():
     print(
         "\nLSTM model created."
     )
+    print(f"Training device: {DEVICE}")
 
     print(
         f"Hidden size: {HIDDEN_SIZE}"

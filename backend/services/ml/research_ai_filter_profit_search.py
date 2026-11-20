@@ -3,12 +3,17 @@ from __future__ import annotations
 from dataclasses import dataclass
 from itertools import product
 from pathlib import Path
+from datetime import datetime
 import json
+import os
+import subprocess
+import sys
 
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import LabelEncoder
 from xgboost import XGBClassifier
+from fast_rule_simulator import prepare_rule_arrays, simulate_rule_fast
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -26,6 +31,8 @@ OUTPUT_DIR = (
     / "processed"
     / "ai_filter_profit_search"
 )
+
+OUTPUT_DIR = Path(os.getenv("TRADEMIND_AI_FILTER_OUTPUT_DIR", str(OUTPUT_DIR)))
 
 RESULT_FILE = OUTPUT_DIR / "search_results.csv"
 TRADE_FILE = OUTPUT_DIR / "search_trades.csv"
@@ -406,12 +413,18 @@ def train_model(
         random_state=42,
         n_jobs=-1,
         tree_method="hist",
+        device=os.getenv("TRADEMIND_XGB_DEVICE", "cpu"),
     )
 
     model.fit(
         X,
         y,
     )
+    if os.getenv("TRADEMIND_XGB_DEVICE", "cpu").startswith("cuda"):
+        config = json.loads(model.get_booster().save_config())
+        actual = config["learner"]["generic_param"]["device"]
+        if not actual.startswith("cuda"):
+            raise RuntimeError(f"XGBoost requested CUDA but used {actual}")
 
     return (
         model,
@@ -627,7 +640,9 @@ def simulate_rule(
 ) -> list[dict]:
     trades = []
 
-    index = 0
+    # Earlier rows can never generate validation/test trades.
+    # df is sorted by open_time in main().
+    index = int(df["open_time"].searchsorted(VALIDATION_START))
 
     while (
         index
@@ -1200,10 +1215,14 @@ def main() -> None:
     )
 
     rules = build_rules()
+    rule_cache = prepare_rule_arrays(
+        df, VALIDATION_START, TEST_START, HORIZON_BARS
+    )
 
     print(
         f"Candidate rules: {len(rules):,}"
     )
+    print("Using parity-tested NumPy rule evaluation")
 
     all_trades = []
     result_rows = []
@@ -1213,9 +1232,10 @@ def main() -> None:
         start=1,
     ):
         rule_trades = (
-            simulate_rule(
-                df,
+            simulate_rule_fast(
+                rule_cache,
                 rule,
+                COSTS,
             )
         )
 
@@ -1407,4 +1427,39 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    # Keep the familiar "python -u ...research_ai_filter_profit_search.py"
+    # command fast, even when the VS Code terminal uses system Python.
+    # Opt out with TRADEMIND_XGB_DEVICE=cpu or TRADEMIND_DISABLE_GPU_REEXEC=1.
+    gpu_python = PROJECT_ROOT / ".gpu-venv" / "Scripts" / "python.exe"
+    disable_gpu = (
+        os.environ.get("TRADEMIND_DISABLE_GPU_REEXEC") == "1"
+        or os.environ.get("TRADEMIND_XGB_DEVICE", "").lower() == "cpu"
+    )
+    in_gpu_env = (
+        gpu_python.is_file()
+        and str(Path(sys.executable).resolve()).casefold()
+        == str(gpu_python.resolve()).casefold()
+    )
+    if gpu_python.is_file() and not disable_gpu and not in_gpu_env:
+        run_env = os.environ.copy()
+        run_env.setdefault("TRADEMIND_XGB_DEVICE", "cuda")
+        run_env.setdefault("PYTHONIOENCODING", "utf-8")
+        run_env.setdefault(
+            "TRADEMIND_AI_FILTER_OUTPUT_DIR",
+            str(
+                PROJECT_ROOT / "data" / "processed"
+                / "ai_filter_profit_search_gpu_optimized"
+                / datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+            ),
+        )
+        print("TradeMind: launching verified CUDA Python environment", flush=True)
+        raise SystemExit(
+            subprocess.call(
+                [str(gpu_python), "-u", str(Path(__file__).resolve()), *sys.argv[1:]],
+                env=run_env,
+            )
+        )
+    if in_gpu_env and not disable_gpu:
+        os.environ.setdefault("TRADEMIND_XGB_DEVICE", "cuda")
+        os.environ.setdefault("PYTHONIOENCODING", "utf-8")
     main()
