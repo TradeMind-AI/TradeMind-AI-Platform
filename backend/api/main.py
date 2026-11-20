@@ -654,6 +654,349 @@ def get_10m_v2_comparison():
     }
 
 
+@app.get("/api/research/v3-profit-first")
+def get_v3_profit_first_research():
+    output_dir = (
+        PROJECT_ROOT
+        / "data"
+        / "processed"
+        / "v3_multitimeframe_profit_first"
+    )
+
+    summary_file = (
+        output_dir
+        / "summary.json"
+    )
+
+    top_file = (
+        output_dir
+        / "top_candidates.csv"
+    )
+
+    if not summary_file.exists():
+        return {
+            "available": False,
+            "researchOnly": True,
+            "status": "NOT_RUN",
+            "message": (
+                "V3 multi-timeframe profit-first "
+                "research has not completed yet."
+            ),
+            "bestCandidate": None,
+            "topCandidates": [],
+        }
+
+    try:
+        summary = json.loads(
+            summary_file.read_text(
+                encoding="utf-8",
+            )
+        )
+    except (
+        json.JSONDecodeError,
+        OSError,
+    ):
+        return {
+            "available": False,
+            "researchOnly": True,
+            "status": "INVALID_OUTPUT",
+            "message": (
+                "V3 research output could not "
+                "be read."
+            ),
+            "bestCandidate": None,
+            "topCandidates": [],
+        }
+
+    best = summary.get(
+        "best_validation_candidate",
+        {},
+    )
+
+    top_candidates = []
+
+    if top_file.exists():
+        try:
+            top = pd.read_csv(
+                top_file
+            )
+
+            for _, row in (
+                top.head(10)
+                .iterrows()
+            ):
+                top_candidates.append(
+                    {
+                        "timeframe":
+                            safe_string(
+                                row.get(
+                                    "timeframe"
+                                )
+                            ),
+                        "horizonMinutes":
+                            int(
+                                safe_float(
+                                    row.get(
+                                        "horizon_minutes",
+                                        0,
+                                    )
+                                )
+                            ),
+                        "proposerThreshold":
+                            safe_float(
+                                row.get(
+                                    "proposer_threshold",
+                                    0.0,
+                                )
+                            ),
+                        "selectorThreshold":
+                            safe_float(
+                                row.get(
+                                    "selector_threshold",
+                                    0.0,
+                                )
+                            ),
+                        "validationTrades":
+                            int(
+                                safe_float(
+                                    row.get(
+                                        "trades",
+                                        0,
+                                    )
+                                )
+                            ),
+                        "validationTradesPerDay":
+                            safe_float(
+                                row.get(
+                                    "trades_per_day",
+                                    0.0,
+                                )
+                            ),
+                        "validationWinRatePct":
+                            safe_float(
+                                row.get(
+                                    "win_rate_mid_pct",
+                                    0.0,
+                                )
+                            ),
+                        "validationNetMidPct":
+                            safe_float(
+                                row.get(
+                                    "net_mid_sum_pct",
+                                    0.0,
+                                )
+                            ),
+                        "validationNetHighPct":
+                            safe_float(
+                                row.get(
+                                    "net_high_sum_pct",
+                                    0.0,
+                                )
+                            ),
+                        "testTrades":
+                            int(
+                                safe_float(
+                                    row.get(
+                                        "test_trades",
+                                        0,
+                                    )
+                                )
+                            ),
+                        "testTradesPerDay":
+                            safe_float(
+                                row.get(
+                                    "test_trades_per_day",
+                                    0.0,
+                                )
+                            ),
+                        "testWinRatePct":
+                            safe_float(
+                                row.get(
+                                    "test_win_rate_mid_pct",
+                                    0.0,
+                                )
+                            ),
+                        "testNetMidPct":
+                            safe_float(
+                                row.get(
+                                    "test_net_mid_sum_pct",
+                                    0.0,
+                                )
+                            ),
+                        "testNetHighPct":
+                            safe_float(
+                                row.get(
+                                    "test_net_high_sum_pct",
+                                    0.0,
+                                )
+                            ),
+                        "testTargetMet":
+                            bool(
+                                row.get(
+                                    "test_strict_target_met",
+                                    False,
+                                )
+                            ),
+                    }
+                )
+        except (
+            OSError,
+            ValueError,
+        ):
+            top_candidates = []
+
+    test_target_met = bool(
+        best.get(
+            "test_target_met",
+            False,
+        )
+    )
+
+    return {
+        "available": True,
+        "researchOnly": True,
+        "status": (
+            "TARGET_MET"
+            if test_target_met
+            else "TARGET_NOT_MET"
+        ),
+        "architecture": summary.get(
+            "architecture",
+            "",
+        ),
+        "candidateCombinations": int(
+            summary.get(
+                "candidate_combinations",
+                0,
+            )
+        ),
+        "timeframes": summary.get(
+            "timeframes",
+            [],
+        ),
+        "horizonsMinutes": summary.get(
+            "horizons_minutes",
+            [],
+        ),
+        "targets": summary.get(
+            "targets",
+            {},
+        ),
+        "bestCandidate": (
+            {
+                "timeframe":
+                    safe_string(
+                        best.get(
+                            "timeframe",
+                            "",
+                        )
+                    ),
+                "horizonMinutes":
+                    int(
+                        best.get(
+                            "horizon_minutes",
+                            0,
+                        )
+                    ),
+                "proposerThreshold":
+                    safe_float(
+                        best.get(
+                            "proposer_threshold",
+                            0.0,
+                        )
+                    ),
+                "selectorThreshold":
+                    safe_float(
+                        best.get(
+                            "selector_threshold",
+                            0.0,
+                        )
+                    ),
+                "validationTrades":
+                    int(
+                        best.get(
+                            "validation_trades",
+                            0,
+                        )
+                    ),
+                "validationTradesPerDay":
+                    safe_float(
+                        best.get(
+                            "validation_trades_per_day",
+                            0.0,
+                        )
+                    ),
+                "validationWinRatePct":
+                    safe_float(
+                        best.get(
+                            "validation_win_rate_mid_pct",
+                            0.0,
+                        )
+                    ),
+                "validationNetMidPct":
+                    safe_float(
+                        best.get(
+                            "validation_net_mid_sum_pct",
+                            0.0,
+                        )
+                    ),
+                "validationNetHighPct":
+                    safe_float(
+                        best.get(
+                            "validation_net_high_sum_pct",
+                            0.0,
+                        )
+                    ),
+                "testTrades":
+                    int(
+                        best.get(
+                            "test_trades",
+                            0,
+                        )
+                    ),
+                "testTradesPerDay":
+                    safe_float(
+                        best.get(
+                            "test_trades_per_day",
+                            0.0,
+                        )
+                    ),
+                "testWinRatePct":
+                    safe_float(
+                        best.get(
+                            "test_win_rate_mid_pct",
+                            0.0,
+                        )
+                    ),
+                "testNetMidPct":
+                    safe_float(
+                        best.get(
+                            "test_net_mid_sum_pct",
+                            0.0,
+                        )
+                    ),
+                "testNetHighPct":
+                    safe_float(
+                        best.get(
+                            "test_net_high_sum_pct",
+                            0.0,
+                        )
+                    ),
+                "testTargetMet":
+                    test_target_met,
+            }
+            if best
+            else None
+        ),
+        "topCandidates":
+            top_candidates,
+        "message": summary.get(
+            "warning",
+            "",
+        ),
+    }
+
+
 @app.get("/api/dashboard")
 def get_dashboard(
     timeframe: str = Query(
