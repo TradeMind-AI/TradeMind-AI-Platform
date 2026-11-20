@@ -997,6 +997,414 @@ def get_v3_profit_first_research():
     }
 
 
+def read_research_json(path: Path) -> dict:
+    if not path.exists():
+        return {}
+
+    try:
+        return json.loads(
+            path.read_text(
+                encoding="utf-8",
+            )
+        )
+    except (
+        json.JSONDecodeError,
+        OSError,
+    ):
+        return {}
+
+
+def v3_track_snapshot(
+    summary: dict,
+    *,
+    kind: str,
+) -> dict:
+    if not summary:
+        return {
+            "available": False,
+            "kind": kind,
+        }
+
+    if kind == "multitimeframe":
+        best = summary.get(
+            "best_validation_candidate",
+            {},
+        )
+
+        return {
+            "available": True,
+            "kind": kind,
+            "architecture": summary.get(
+                "architecture",
+                "",
+            ),
+            "configuration": {
+                "timeframe": best.get(
+                    "timeframe",
+                    "",
+                ),
+                "horizonMinutes": int(
+                    best.get(
+                        "horizon_minutes",
+                        0,
+                    )
+                ),
+            },
+            "validation": {
+                "trades": int(
+                    best.get(
+                        "validation_trades",
+                        0,
+                    )
+                ),
+                "tradesPerDay": safe_float(
+                    best.get(
+                        "validation_trades_per_day",
+                        0.0,
+                    )
+                ),
+                "winRatePct": safe_float(
+                    best.get(
+                        "validation_win_rate_mid_pct",
+                        0.0,
+                    )
+                ),
+                "netMidPct": safe_float(
+                    best.get(
+                        "validation_net_mid_sum_pct",
+                        0.0,
+                    )
+                ),
+                "netHighPct": safe_float(
+                    best.get(
+                        "validation_net_high_sum_pct",
+                        0.0,
+                    )
+                ),
+            },
+            "test": {
+                "trades": int(
+                    best.get(
+                        "test_trades",
+                        0,
+                    )
+                ),
+                "tradesPerDay": safe_float(
+                    best.get(
+                        "test_trades_per_day",
+                        0.0,
+                    )
+                ),
+                "winRatePct": safe_float(
+                    best.get(
+                        "test_win_rate_mid_pct",
+                        0.0,
+                    )
+                ),
+                "netMidPct": safe_float(
+                    best.get(
+                        "test_net_mid_sum_pct",
+                        0.0,
+                    )
+                ),
+                "netHighPct": safe_float(
+                    best.get(
+                        "test_net_high_sum_pct",
+                        0.0,
+                    )
+                ),
+                "targetMet": bool(
+                    best.get(
+                        "test_target_met",
+                        False,
+                    )
+                ),
+            },
+        }
+
+    if kind == "barrier":
+        best = summary.get(
+            "best_validation_candidate",
+            {},
+        )
+
+        return {
+            "available": True,
+            "kind": kind,
+            "architecture": summary.get(
+                "architecture",
+                "",
+            ),
+            "configuration": {
+                "horizonMinutes": int(
+                    best.get(
+                        "horizon_minutes",
+                        0,
+                    )
+                ),
+                "takeProfitPct": safe_float(
+                    best.get(
+                        "take_profit_pct",
+                        0.0,
+                    )
+                ),
+                "stopLossPct": safe_float(
+                    best.get(
+                        "stop_loss_pct",
+                        0.0,
+                    )
+                ),
+                "confidenceThreshold": safe_float(
+                    best.get(
+                        "confidence_threshold",
+                        0.0,
+                    )
+                ),
+            },
+            "validation": {
+                "trades": int(
+                    best.get(
+                        "validation_trades",
+                        0,
+                    )
+                ),
+                "tradesPerDay": safe_float(
+                    best.get(
+                        "validation_trades_per_day",
+                        0.0,
+                    )
+                ),
+                "winRatePct": safe_float(
+                    best.get(
+                        "validation_win_rate_mid_pct",
+                        0.0,
+                    )
+                ),
+                "netMidPct": safe_float(
+                    best.get(
+                        "validation_net_mid_sum_pct",
+                        0.0,
+                    )
+                ),
+                "netHighPct": safe_float(
+                    best.get(
+                        "validation_net_high_sum_pct",
+                        0.0,
+                    )
+                ),
+            },
+            "test": {
+                "trades": int(
+                    best.get(
+                        "test_trades",
+                        0,
+                    )
+                ),
+                "tradesPerDay": safe_float(
+                    best.get(
+                        "test_trades_per_day",
+                        0.0,
+                    )
+                ),
+                "winRatePct": safe_float(
+                    best.get(
+                        "test_win_rate_mid_pct",
+                        0.0,
+                    )
+                ),
+                "netMidPct": safe_float(
+                    best.get(
+                        "test_net_mid_sum_pct",
+                        0.0,
+                    )
+                ),
+                "netHighPct": safe_float(
+                    best.get(
+                        "test_net_high_sum_pct",
+                        0.0,
+                    )
+                ),
+                "targetMet": bool(
+                    best.get(
+                        "test_target_met",
+                        False,
+                    )
+                ),
+            },
+        }
+
+    validation = summary.get(
+        "validation_selected",
+        {},
+    )
+    test = summary.get(
+        "test_result",
+        {},
+    )
+
+    return {
+        "available": True,
+        "kind": kind,
+        "architecture": summary.get(
+            "architecture",
+            "",
+        ),
+        "configuration": summary.get(
+            "configuration",
+            {},
+        ),
+        "validation": {
+            "trades": int(
+                validation.get(
+                    "trades",
+                    0,
+                )
+            ),
+            "tradesPerDay": safe_float(
+                validation.get(
+                    "trades_per_day",
+                    0.0,
+                )
+            ),
+            "winRatePct": safe_float(
+                validation.get(
+                    "win_rate_mid_pct",
+                    0.0,
+                )
+            ),
+            "netMidPct": safe_float(
+                validation.get(
+                    "net_mid_sum_pct",
+                    0.0,
+                )
+            ),
+            "netHighPct": safe_float(
+                validation.get(
+                    "net_high_sum_pct",
+                    0.0,
+                )
+            ),
+        },
+        "test": {
+            "trades": int(
+                test.get(
+                    "trades",
+                    0,
+                )
+            ),
+            "tradesPerDay": safe_float(
+                test.get(
+                    "trades_per_day",
+                    0.0,
+                )
+            ),
+            "winRatePct": safe_float(
+                test.get(
+                    "win_rate_mid_pct",
+                    0.0,
+                )
+            ),
+            "netMidPct": safe_float(
+                test.get(
+                    "net_mid_sum_pct",
+                    0.0,
+                )
+            ),
+            "netHighPct": safe_float(
+                test.get(
+                    "net_high_sum_pct",
+                    0.0,
+                )
+            ),
+            "targetMet": bool(
+                test.get(
+                    "strict_target_met",
+                    False,
+                )
+            ),
+        },
+    }
+
+
+@app.get("/api/research/v3-suite")
+def get_v3_research_suite():
+    processed = (
+        PROJECT_ROOT
+        / "data"
+        / "processed"
+    )
+
+    multitimeframe = read_research_json(
+        processed
+        / "v3_multitimeframe_profit_first"
+        / "summary.json"
+    )
+
+    barrier = read_research_json(
+        processed
+        / "v3_barrier_opportunity"
+        / "summary.json"
+    )
+
+    transformer = read_research_json(
+        processed
+        / "v3_transformer_barrier"
+        / "summary.json"
+    )
+
+    gate = read_research_json(
+        processed
+        / "v3_promotion_gate.json"
+    )
+
+    return {
+        "available": bool(
+            multitimeframe
+            or barrier
+            or transformer
+        ),
+        "researchOnly": True,
+        "promotionStatus": gate.get(
+            "status",
+            "NOT_EVALUATED",
+        ),
+        "requirements": gate.get(
+            "requirements",
+            {},
+        ),
+        "qualifiedCandidateCount": len(
+            gate.get(
+                "qualified_candidates",
+                [],
+            )
+        ),
+        "selectedCandidate": gate.get(
+            "selected_candidate"
+        ),
+        "note": gate.get(
+            "note",
+            (
+                "V3 promotion gate has not "
+                "been evaluated yet."
+            ),
+        ),
+        "tracks": [
+            v3_track_snapshot(
+                multitimeframe,
+                kind="multitimeframe",
+            ),
+            v3_track_snapshot(
+                barrier,
+                kind="barrier",
+            ),
+            v3_track_snapshot(
+                transformer,
+                kind="transformer",
+            ),
+        ],
+    }
+
+
 @app.get("/api/dashboard")
 def get_dashboard(
     timeframe: str = Query(

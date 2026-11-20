@@ -1,5 +1,5 @@
 import type {
-  V3ProfitFirstResearch,
+  V3ResearchSuite,
 } from '../types/trading'
 
 
@@ -7,11 +7,11 @@ const API_BASE_URL =
   'http://127.0.0.1:8000'
 
 
-export const getV3ProfitFirstResearch =
-  async (): Promise<V3ProfitFirstResearch> => {
+export const getV3ResearchSuite =
+  async (): Promise<V3ResearchSuite> => {
     const response =
       await fetch(
-        `${API_BASE_URL}/api/research/v3-profit-first`,
+        `${API_BASE_URL}/api/research/v3-suite`,
       )
 
     if (!response.ok) {

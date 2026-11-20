@@ -4,39 +4,115 @@ import {
 } from 'react'
 
 import {
-  getV3ProfitFirstResearch,
+  getV3ResearchSuite,
 } from '../../services/v3ResearchApi'
 
 import type {
-  V3ProfitFirstResearch,
+  V3ResearchSuite,
+  V3ResearchTrack,
 } from '../../types/trading'
 
 
-const Metric = ({
-  label,
-  value,
-  subtext,
+const TRACK_LABELS:
+  Record<V3ResearchTrack['kind'], string> = {
+    multitimeframe:
+      'Multi-timeframe direction + profit selector',
+    barrier:
+      'Path-aware TP / SL opportunity model',
+    transformer:
+      'Transformer trade-success model',
+  }
+
+
+const ResearchTrackCard = ({
+  track,
 }: {
-  label: string
-  value: string
-  subtext?: string
-}) => (
-  <div className="rounded-xl border border-white/5 bg-black/10 p-4">
-    <p className="text-xs uppercase tracking-[0.14em] text-white/25">
-      {label}
-    </p>
+  track: V3ResearchTrack
+}) => {
+  const test = track.test
 
-    <p className="mt-2 text-lg font-semibold text-white/80">
-      {value}
-    </p>
+  return (
+    <div className="rounded-xl border border-white/5 bg-black/10 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-medium text-white/80">
+            {TRACK_LABELS[track.kind]}
+          </p>
 
-    {subtext && (
-      <p className="mt-1 text-xs leading-5 text-white/30">
-        {subtext}
-      </p>
-    )}
-  </div>
-)
+          <p className="mt-1 max-w-xl text-xs leading-5 text-white/30">
+            {track.architecture ?? 'Research output unavailable'}
+          </p>
+        </div>
+
+        <span
+          className={[
+            'rounded-full border px-2.5 py-1 text-[11px]',
+            test?.targetMet
+              ? 'border-emerald-400/20 bg-emerald-400/[0.08] text-emerald-200'
+              : 'border-white/10 bg-white/[0.03] text-white/40',
+          ].join(' ')}
+        >
+          {test?.targetMet
+            ? 'Target met'
+            : 'Rejected'}
+        </span>
+      </div>
+
+      {!track.available || !test ? (
+        <p className="mt-4 text-sm text-white/30">
+          No completed result.
+        </p>
+      ) : (
+        <div className="mt-4 grid grid-cols-2 gap-3 text-sm lg:grid-cols-5">
+          <div>
+            <p className="text-xs text-white/30">
+              Test trades
+            </p>
+            <p className="mt-1 font-semibold">
+              {test.trades}
+            </p>
+          </div>
+
+          <div>
+            <p className="text-xs text-white/30">
+              Trades / day
+            </p>
+            <p className="mt-1 font-semibold">
+              {test.tradesPerDay.toFixed(2)}
+            </p>
+          </div>
+
+          <div>
+            <p className="text-xs text-white/30">
+              Win rate
+            </p>
+            <p className="mt-1 font-semibold">
+              {test.winRatePct.toFixed(2)}%
+            </p>
+          </div>
+
+          <div>
+            <p className="text-xs text-white/30">
+              Mid-cost net
+            </p>
+            <p className="mt-1 font-semibold">
+              {test.netMidPct.toFixed(2)}%
+            </p>
+          </div>
+
+          <div>
+            <p className="text-xs text-white/30">
+              High-cost net
+            </p>
+            <p className="mt-1 font-semibold">
+              {test.netHighPct.toFixed(2)}%
+            </p>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
 
 
 const V3ProfitFirstPanel = () => {
@@ -44,7 +120,7 @@ const V3ProfitFirstPanel = () => {
     data,
     setData,
   ] =
-    useState<V3ProfitFirstResearch | null>(
+    useState<V3ResearchSuite | null>(
       null,
     )
 
@@ -62,7 +138,7 @@ const V3ProfitFirstPanel = () => {
     const load = async () => {
       try {
         const next =
-          await getV3ProfitFirstResearch()
+          await getV3ResearchSuite()
 
         if (active) {
           setData(next)
@@ -93,39 +169,40 @@ const V3ProfitFirstPanel = () => {
     }
   }, [])
 
-  const candidate =
-    data?.bestCandidate ?? null
+  const qualified =
+    data?.promotionStatus
+    === 'QUALIFIED_FOR_FORWARD_PAPER'
 
   return (
     <section className="rounded-2xl border border-white/10 bg-white/[0.025] p-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p className="text-xs uppercase tracking-[0.2em] text-white/30">
-            TradeMind V3 Research
+            TradeMind V3 Research Suite
           </p>
 
           <h2 className="mt-2 text-xl font-semibold">
-            Profit-first · frequency-aware AI
+            Frequency + win rate + profit gate
           </h2>
 
           <p className="mt-2 max-w-3xl text-sm leading-6 text-white/40">
-            V3 removes NEUTRAL from the direction proposer. It proposes LONG or SHORT, then a separate profitability model decides whether the trade is worth executing after costs.
+            A model is promoted only when validation and later-test evidence both satisfy the confidence, win-rate, trade-frequency, sample-size and transaction-cost requirements.
           </p>
         </div>
 
         <span
           className={[
             'w-fit rounded-full border px-3 py-1.5 text-xs font-medium',
-            data?.status === 'TARGET_MET'
+            qualified
               ? 'border-emerald-400/20 bg-emerald-400/[0.08] text-emerald-200'
               : 'border-amber-400/20 bg-amber-400/[0.08] text-amber-200',
           ].join(' ')}
         >
-          {data?.status === 'TARGET_MET'
-            ? 'Target met'
-            : data?.available
-              ? 'Research only'
-              : 'Awaiting results'}
+          {qualified
+            ? 'Eligible for forward paper'
+            : data?.promotionStatus === 'NO_QUALIFIED_CANDIDATE'
+              ? 'No candidate qualified'
+              : 'Gate not evaluated'}
         </span>
       </div>
 
@@ -135,84 +212,85 @@ const V3ProfitFirstPanel = () => {
         </p>
       )}
 
-      {!error && data && !data.available && (
-        <div className="mt-6 rounded-xl border border-white/5 bg-black/10 p-4 text-sm text-white/40">
-          {data.message}
-        </div>
-      )}
-
-      {candidate && (
+      {data && (
         <>
-          <div className="mt-6 rounded-xl border border-white/5 bg-black/10 p-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <p className="text-xs text-white/30">
-                  Validation-selected candidate
-                </p>
-
-                <p className="mt-1 text-lg font-semibold">
-                  {candidate.timeframe} · {candidate.horizonMinutes}m horizon
-                </p>
-              </div>
-
+          <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+            <div className="rounded-xl border border-white/5 bg-black/10 p-4">
               <p className="text-xs text-white/30">
-                proposer ≥ {(candidate.proposerThreshold * 100).toFixed(0)}% · selector ≥ {(candidate.selectorThreshold * 100).toFixed(0)}%
+                Required confidence
+              </p>
+              <p className="mt-2 text-lg font-semibold">
+                {(
+                  Number(
+                    data.requirements.minimum_confidence ?? 0,
+                  ) * 100
+                ).toFixed(0)}%
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-white/5 bg-black/10 p-4">
+              <p className="text-xs text-white/30">
+                Required win rate
+              </p>
+              <p className="mt-2 text-lg font-semibold">
+                {Number(
+                  data.requirements.minimum_win_rate_pct ?? 0,
+                ).toFixed(0)}%
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-white/5 bg-black/10 p-4">
+              <p className="text-xs text-white/30">
+                Minimum frequency
+              </p>
+              <p className="mt-2 text-lg font-semibold">
+                {Number(
+                  data.requirements.minimum_trades_per_day ?? 0,
+                ).toFixed(1)} / day
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-white/5 bg-black/10 p-4">
+              <p className="text-xs text-white/30">
+                Minimum sample
+              </p>
+              <p className="mt-2 text-lg font-semibold">
+                {Number(
+                  data.requirements.minimum_trades ?? 0,
+                )} trades
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-white/5 bg-black/10 p-4">
+              <p className="text-xs text-white/30">
+                Qualified candidates
+              </p>
+              <p className="mt-2 text-lg font-semibold">
+                {data.qualifiedCandidateCount}
               </p>
             </div>
           </div>
 
-          <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <Metric
-              label="Later-test win rate"
-              value={`${candidate.testWinRatePct.toFixed(2)}%`}
-              subtext="Net-positive trades after the mid-cost assumption"
-            />
-
-            <Metric
-              label="Later-test frequency"
-              value={`${candidate.testTradesPerDay.toFixed(2)} / day`}
-              subtext={`${candidate.testTrades} later-test trades`}
-            />
-
-            <Metric
-              label="Later-test mid-cost net"
-              value={`${candidate.testNetMidPct.toFixed(2)}%`}
-              subtext="Summed research trade return"
-            />
-
-            <Metric
-              label="High-cost stress net"
-              value={`${candidate.testNetHighPct.toFixed(2)}%`}
-              subtext="Must remain positive for strict target"
-            />
+          <div className="mt-4 space-y-3">
+            {data.tracks.map(
+              (track) => (
+                <ResearchTrackCard
+                  key={track.kind}
+                  track={track}
+                />
+              ),
+            )}
           </div>
 
-          <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <Metric
-              label="Validation win rate"
-              value={`${candidate.validationWinRatePct.toFixed(2)}%`}
-            />
+          <div className="mt-4 rounded-xl border border-white/5 bg-black/10 p-4">
+            <p className="text-xs uppercase tracking-[0.14em] text-white/25">
+              Promotion decision
+            </p>
 
-            <Metric
-              label="Validation frequency"
-              value={`${candidate.validationTradesPerDay.toFixed(2)} / day`}
-            />
-
-            <Metric
-              label="Validation trades"
-              value={String(candidate.validationTrades)}
-            />
-
-            <Metric
-              label="Strict target"
-              value={candidate.testTargetMet ? 'PASS' : 'NOT PROVEN'}
-              subtext="80% win target + frequency + positive cost stress"
-            />
+            <p className="mt-2 text-sm leading-6 text-white/55">
+              {data.note}
+            </p>
           </div>
-
-          <p className="mt-4 text-xs leading-5 text-white/30">
-            {data?.message ?? ''}
-          </p>
         </>
       )}
     </section>

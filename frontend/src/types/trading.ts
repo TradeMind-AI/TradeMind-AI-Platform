@@ -270,3 +270,40 @@ export type V3ProfitFirstResearch = {
   bestCandidate: V3CandidateMetrics | null
   topCandidates: V3CandidateMetrics[]
 }
+
+
+export type V3TrackMetrics = {
+  trades: number
+  tradesPerDay: number
+  winRatePct: number
+  netMidPct: number
+  netHighPct: number
+}
+
+export type V3ResearchTrack = {
+  available: boolean
+  kind:
+    | 'multitimeframe'
+    | 'barrier'
+    | 'transformer'
+  architecture?: string
+  configuration?: Record<string, string | number>
+  validation?: V3TrackMetrics
+  test?: V3TrackMetrics & {
+    targetMet: boolean
+  }
+}
+
+export type V3ResearchSuite = {
+  available: boolean
+  researchOnly: boolean
+  promotionStatus:
+    | 'NOT_EVALUATED'
+    | 'NO_QUALIFIED_CANDIDATE'
+    | 'QUALIFIED_FOR_FORWARD_PAPER'
+  requirements: Record<string, number | boolean>
+  qualifiedCandidateCount: number
+  selectedCandidate: Record<string, unknown> | null
+  note: string
+  tracks: V3ResearchTrack[]
+}
