@@ -233,3 +233,40 @@ export type TenMinuteV2Comparison = {
   v2: TenMinuteForwardCandidateMetrics
   note: string
 }
+
+
+export type V3CandidateMetrics = {
+  timeframe: string
+  horizonMinutes: number
+  proposerThreshold: number
+  selectorThreshold: number
+  validationTrades: number
+  validationTradesPerDay: number
+  validationWinRatePct: number
+  validationNetMidPct: number
+  validationNetHighPct: number
+  testTrades: number
+  testTradesPerDay: number
+  testWinRatePct: number
+  testNetMidPct: number
+  testNetHighPct: number
+  testTargetMet: boolean
+}
+
+export type V3ProfitFirstResearch = {
+  available: boolean
+  researchOnly: boolean
+  status:
+    | 'NOT_RUN'
+    | 'INVALID_OUTPUT'
+    | 'TARGET_MET'
+    | 'TARGET_NOT_MET'
+  message: string
+  architecture?: string
+  candidateCombinations?: number
+  timeframes?: string[]
+  horizonsMinutes?: number[]
+  targets?: Record<string, number>
+  bestCandidate: V3CandidateMetrics | null
+  topCandidates: V3CandidateMetrics[]
+}

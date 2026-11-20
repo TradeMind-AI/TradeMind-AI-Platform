@@ -37,6 +37,9 @@ import MicroPaperMonitor
 import TenMinuteV2ComparisonPanel
   from '../../components/dashboard/TenMinuteV2ComparisonPanel'
 
+import V3ProfitFirstPanel
+  from '../../components/dashboard/V3ProfitFirstPanel'
+
 import {
   getDashboardData,
   getTimeframeStatus,
@@ -644,6 +647,10 @@ const Dashboard = () => {
                       <TenMinuteV2ComparisonPanel />
                     </div>
                   )}
+
+                  <div className="mt-6">
+                    <V3ProfitFirstPanel />
+                  </div>
 
                   <div className="mt-6">
                     <RecentSignals
