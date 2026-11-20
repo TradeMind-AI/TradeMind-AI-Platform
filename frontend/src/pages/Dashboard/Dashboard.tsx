@@ -34,6 +34,9 @@ import ManualPaperTrading
 import MicroPaperMonitor
   from '../../components/dashboard/MicroPaperMonitor'
 
+import TenMinuteV2ComparisonPanel
+  from '../../components/dashboard/TenMinuteV2ComparisonPanel'
+
 import {
   getDashboardData,
   getTimeframeStatus,
@@ -635,6 +638,12 @@ const Dashboard = () => {
                     />
                   </div>
 
+
+                  {selectedTimeframe === '10m' && (
+                    <div className="mt-6">
+                      <TenMinuteV2ComparisonPanel />
+                    </div>
+                  )}
 
                   <div className="mt-6">
                     <RecentSignals
