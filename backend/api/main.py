@@ -3,7 +3,6 @@ from pathlib import Path
 import pandas as pd
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from .forex import router as forex_router
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -38,9 +37,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
-app.include_router(forex_router)
 
 
 def safe_float(value, default=0.0):
