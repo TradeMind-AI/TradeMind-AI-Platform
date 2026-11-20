@@ -557,6 +557,103 @@ def get_staged_forward_research():
     }
 
 
+def summarize_10m_forward_log(path: Path) -> dict:
+    if not path.exists():
+        return {
+            "available": False,
+            "decisions": 0,
+            "closedTrades": 0,
+            "winRatePct": 0.0,
+            "netReturnPct": 0.0,
+            "latestSignalTime": "",
+            "latestSignal": "HOLD",
+        }
+
+    frame = pd.read_csv(path)
+
+    if frame.empty:
+        return {
+            "available": False,
+            "decisions": 0,
+            "closedTrades": 0,
+            "winRatePct": 0.0,
+            "netReturnPct": 0.0,
+            "latestSignalTime": "",
+            "latestSignal": "HOLD",
+        }
+
+    closed = frame[
+        frame["status"].astype(str)
+        == "CLOSED"
+    ].copy()
+
+    mid_returns = pd.to_numeric(
+        closed.get(
+            "mid_cost_net_pct",
+            pd.Series(dtype=float),
+        ),
+        errors="coerce",
+    ).dropna()
+
+    return {
+        "available": True,
+        "decisions": int(len(frame)),
+        "closedTrades": int(len(closed)),
+        "winRatePct": (
+            float((mid_returns > 0).mean() * 100)
+            if not mid_returns.empty
+            else 0.0
+        ),
+        "netReturnPct": (
+            float(mid_returns.sum())
+            if not mid_returns.empty
+            else 0.0
+        ),
+        "latestSignalTime": safe_string(
+            frame.iloc[-1].get("signal_time")
+        ),
+        "latestSignal": safe_string(
+            frame.iloc[-1].get(
+                "signal",
+                "HOLD",
+            )
+        ),
+    }
+
+
+@app.get("/api/research/10m-v2-comparison")
+def get_10m_v2_comparison():
+    v1_file = (
+        PROJECT_ROOT
+        / "data"
+        / "processed"
+        / "paper_forward_10m.csv"
+    )
+
+    v2_file = (
+        PROJECT_ROOT
+        / "data"
+        / "processed"
+        / "paper_forward_10m_v2.csv"
+    )
+
+    return {
+        "researchOnly": True,
+        "candidateName":
+            "cost_aware_10m_rsi25_75_bollinger_v2",
+        "rule":
+            "AI confidence >= 0.55 + RSI 25/75 + "
+            "20-bar Bollinger mean-reversion gate",
+        "v1": summarize_10m_forward_log(v1_file),
+        "v2": summarize_10m_forward_log(v2_file),
+        "note": (
+            "V2 was selected from exploratory historical "
+            "research. Only new forward paper outcomes should "
+            "be used to judge whether it improves on V1."
+        ),
+    }
+
+
 @app.get("/api/dashboard")
 def get_dashboard(
     timeframe: str = Query(
