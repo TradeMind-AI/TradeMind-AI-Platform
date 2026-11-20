@@ -4,7 +4,7 @@ import joblib
 import numpy as np
 import pandas as pd
 
-from backend.services.trading.paper_forward_10m import (
+from paper_forward_10m import (
     COSTS,
     LOG_COLUMNS,
     has_signal_time,
