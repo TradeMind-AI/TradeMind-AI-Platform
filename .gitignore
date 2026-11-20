@@ -223,3 +223,7 @@ data/processed/*.csv
 data/processed/ml_splits/
 
 
+
+# Local forex paper trading ledger
+data/processed/forex_paper_state.json
+data/processed/forex_paper_state.tmp
