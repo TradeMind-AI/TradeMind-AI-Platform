@@ -38,12 +38,21 @@ STEPS = [
         [],
     ),
     (
-        "4. Update frozen 10m forward paper log",
+        "4. Update frozen 10m V1 forward paper log",
         PROJECT_ROOT
         / "backend"
         / "services"
         / "trading"
         / "paper_forward_10m.py",
+        [],
+    ),
+    (
+        "5. Update RSI/Bollinger 10m V2 forward paper log",
+        PROJECT_ROOT
+        / "backend"
+        / "services"
+        / "trading"
+        / "paper_forward_10m_v2.py",
         [],
     ),
 ]
@@ -79,7 +88,7 @@ def run_step(
 def main() -> None:
     print(
         "TRADEMIND AI - "
-        "COST_AWARE_10M_V1 "
+        "10M V1 + V2 "
         "FORWARD PAPER CYCLE"
     )
 
@@ -106,7 +115,7 @@ def main() -> None:
     print()
     print("=" * 78)
     print(
-        "10M FORWARD PAPER CYCLE COMPLETE"
+        "10M V1 + V2 FORWARD PAPER CYCLE COMPLETE"
     )
     print("=" * 78)
 
